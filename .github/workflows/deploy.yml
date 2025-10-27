@@ -1,4 +1,4 @@
-name: Deploy React App to GitHub Pages
+name: 🚀 Deploy React App to GitHub Pages
 
 on:
   push:
@@ -12,18 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: 🧾 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: ⚙️ Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
-      - name: Print Node/NPM
+      - name: 🧠 Print Node/NPM versions
         run: node -v && npm -v
 
-      - name: Install dependencies (ci, ignore peer deps)
+      - name: 📦 Install dependencies (ignore peer deps)
         run: |
           if [ -f package-lock.json ]; then
             npm ci --legacy-peer-deps
@@ -31,16 +32,15 @@ jobs:
             npm install --legacy-peer-deps
           fi
 
-      - name: Show react-scripts files (debug)
-        run: ls -la node_modules/react-scripts || true
+      - name: 🧰 Verify react-scripts installation
+        run: |
+          ls -la node_modules/react-scripts || npm install react-scripts@5.0.1 --legacy-peer-deps
+          npx react-scripts --version
 
-      - name: Verify react-scripts is available
-        run: npx react-scripts --version
-
-      - name: Build project
+      - name: 🏗️ Build project
         run: npm run build --legacy-peer-deps
 
-      - name: Deploy to GitHub Pages
+      - name: 🌍 Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
