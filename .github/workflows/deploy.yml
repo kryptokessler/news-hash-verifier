@@ -20,14 +20,14 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (ignore peer deps)
+        run: npm install --legacy-peer-deps
 
-      - name: Ensure react-scripts is installed
-        run: npm install react-scripts@5.0.1 --save
+      - name: Verify react-scripts is available
+        run: npx react-scripts --version
 
       - name: Build project
-        run: npm run build
+        run: npm run build --legacy-peer-deps
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
