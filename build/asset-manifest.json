@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.css": "./static/css/main.ed0c4e80.css",
-    "main.js": "./static/js/main.15526729.js",
-    "index.html": "./index.html",
-    "main.ed0c4e80.css.map": "./static/css/main.ed0c4e80.css.map",
-    "main.15526729.js.map": "./static/js/main.15526729.js.map"
+    "main.css": "/news-hash-verifier/static/css/main.ed0c4e80.css",
+    "main.js": "/news-hash-verifier/static/js/main.15526729.js",
+    "index.html": "/news-hash-verifier/index.html",
+    "main.ed0c4e80.css.map": "/news-hash-verifier/static/css/main.ed0c4e80.css.map",
+    "main.15526729.js.map": "/news-hash-verifier/static/js/main.15526729.js.map"
   },
   "entrypoints": [
     "static/css/main.ed0c4e80.css",
