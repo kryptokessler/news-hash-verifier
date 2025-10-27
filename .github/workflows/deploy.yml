@@ -2,9 +2,9 @@ name: Build and Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
   workflow_dispatch:
 
 permissions:
@@ -47,9 +47,9 @@ jobs:
         path: build/
         retention-days: 1
 
-  # Deploy job (only on main branch)
+  # Deploy job (only on master branch)
   deploy:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master'
     needs: build
     runs-on: ubuntu-latest
     environment:

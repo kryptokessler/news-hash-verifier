@@ -59,12 +59,12 @@ The component automatically deploys to GitHub Pages when you push to the main br
 
 - **Live URL**: `https://kryptokessler.github.io/news-hash-verifier/`
 - **Deployment**: Automatic via GitHub Actions
-- **Branch**: `main` or `feature/solana-daily`
+- **Branch**: `master` or `feature/solana-daily`
 
 ### GitHub Actions CI/CD
 This repository includes comprehensive GitHub Actions workflows:
 
-- **🚀 Automatic Deployment**: Builds and deploys on every push to main
+- **🚀 Automatic Deployment**: Builds and deploys on every push to master
 - **🧪 Continuous Integration**: Tests on Node.js 18 & 20 with ESLint
 - **🔒 Security Scanning**: Weekly vulnerability checks and code quality
 - **📦 Dependency Updates**: Automated via Dependabot

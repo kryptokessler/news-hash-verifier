@@ -5,7 +5,7 @@ This repository includes several GitHub Actions workflows to automate CI/CD, tes
 ## 📋 Available Workflows
 
 ### 1. **Deploy to GitHub Pages** (`.github/workflows/deploy.yml`)
-- **Triggers**: Push to `main`/`master`, Pull Requests, Manual dispatch
+- **Triggers**: Push to `master`, Pull Requests, Manual dispatch
 - **Purpose**: Builds and deploys the React app to GitHub Pages
 - **Features**:
   - Node.js 18 setup with npm caching
@@ -16,7 +16,7 @@ This repository includes several GitHub Actions workflows to automate CI/CD, tes
   - Artifact upload/download for efficient deployment
 
 ### 2. **Continuous Integration** (`.github/workflows/ci.yml`)
-- **Triggers**: Push/PR to `main`/`master`/`develop`
+- **Triggers**: Push/PR to `master`/`develop`
 - **Purpose**: Runs tests and builds on multiple Node.js versions
 - **Features**:
   - Matrix strategy testing (Node.js 18 & 20)
@@ -26,7 +26,7 @@ This repository includes several GitHub Actions workflows to automate CI/CD, tes
   - Build output validation
 
 ### 3. **Security Scan** (`.github/workflows/security.yml`)
-- **Triggers**: Push/PR to `main`/`master`, Weekly schedule
+- **Triggers**: Push/PR to `master`, Weekly schedule
 - **Purpose**: Security vulnerability scanning and code quality
 - **Features**:
   - npm audit for dependency vulnerabilities
@@ -54,7 +54,7 @@ This repository includes several GitHub Actions workflows to automate CI/CD, tes
 ## 🚀 Deployment Process
 
 ### Automatic Deployment
-1. **Push to main branch** → Triggers build and deploy
+1. **Push to master branch** → Triggers build and deploy
 2. **Build phase**:
    - Install dependencies with `npm ci --legacy-peer-deps`
    - Run tests with coverage
