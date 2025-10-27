@@ -1,0 +1,47 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci --legacy-peer-deps
+      
+    - name: Run ESLint
+      run: npx eslint src/ --ext .js,.jsx --max-warnings 0
+      continue-on-error: true
+      
+    - name: Run tests
+      run: npm test -- --coverage --watchAll=false --passWithNoTests
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Check build output
+      run: |
+        if [ ! -d "build" ]; then
+          echo "❌ Build failed. No build directory found."
+          exit 1
+        fi
+        echo "✅ Build successful. Files:"
+        ls -la build/

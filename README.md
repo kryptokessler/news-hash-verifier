@@ -61,6 +61,16 @@ The component automatically deploys to GitHub Pages when you push to the main br
 - **Deployment**: Automatic via GitHub Actions
 - **Branch**: `main` or `feature/solana-daily`
 
+### GitHub Actions CI/CD
+This repository includes comprehensive GitHub Actions workflows:
+
+- **🚀 Automatic Deployment**: Builds and deploys on every push to main
+- **🧪 Continuous Integration**: Tests on Node.js 18 & 20 with ESLint
+- **🔒 Security Scanning**: Weekly vulnerability checks and code quality
+- **📦 Dependency Updates**: Automated via Dependabot
+
+See [`.github/ACTIONS.md`](.github/ACTIONS.md) for detailed workflow documentation.
+
 ### WordPress Integration
 
 #### Method 1: Direct iframe
@@ -137,8 +147,20 @@ The component is fully responsive and works on:
 npm start          # Start development server
 npm run build      # Build for production
 npm test           # Run tests
+npm run test:ci    # Run tests for CI (no watch mode)
+npm run lint       # Run ESLint
+npm run lint:fix   # Fix ESLint issues automatically
+npm run deploy     # Build and prepare for deployment
 npm run eject      # Eject from Create React App
 ```
+
+### GitHub Actions
+The repository includes automated workflows for:
+- **CI/CD**: Automatic testing and deployment
+- **Security**: Vulnerability scanning and code quality
+- **Dependencies**: Automated updates via Dependabot
+
+Run `npm run predeploy` locally to test the same checks that run in CI.
 
 ### Project Structure
 ```
