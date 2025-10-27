@@ -18,10 +18,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 18
 
-      - name: Install dependencies (ignore peer deps)
-        run: npm install --legacy-peer-deps
+      - name: Print Node/NPM
+        run: node -v && npm -v
+
+      - name: Install dependencies (ci, ignore peer deps)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
+
+      - name: Show react-scripts files (debug)
+        run: ls -la node_modules/react-scripts || true
 
       - name: Verify react-scripts is available
         run: npx react-scripts --version

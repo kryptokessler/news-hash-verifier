@@ -3,19 +3,20 @@
   "version": "1.0.0",
   "description": "Beautiful React component for hashing news articles to Solana blockchain with bond curve pricing",
   "private": true,
+  "homepage": "https://kryptokessler.github.io/news-hash-verifier",
   "dependencies": {
     "@solana/web3.js": "^1.78.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "web-vitals": "^3.5.0",
-    "framer-motion": "^10.16.4",
-    "lucide-react": "^0.294.0",
-    "clsx": "^2.0.0",
-    "typescript": "^4.9.5",
     "ajv": "^6.12.6",
     "ajv-keywords": "^3.5.2",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "clsx": "^2.0.0",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.294.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "^0.0.0",
+    "typescript": "^4.9.5",
+    "web-vitals": "^3.5.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -25,8 +26,8 @@
     "lint": "eslint src/ --ext .js,.jsx",
     "lint:fix": "eslint src/ --ext .js,.jsx --fix",
     "eject": "react-scripts eject",
-    "deploy": "npm run build && echo 'Build complete. Ready for deployment.'",
-    "predeploy": "npm run test:ci && npm run lint"
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -46,7 +47,6 @@
       "last 1 safari version"
     ]
   },
-  "homepage": ".",
   "resolutions": {
     "typescript": "^4.9.5"
   },
