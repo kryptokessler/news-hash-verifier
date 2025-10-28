@@ -305,10 +305,23 @@ function App() {
         setIsLoadingArticle(true);
         setArticleError('');
         
-        const result = await getArticleText();
-        setArticleText(result.text);
-        setVerificationUrl(result.url);
-        setStatusMessage(`Successfully loaded article from: ${result.url}`);
+        // Check for URL parameter first
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetUrl = urlParams.get('url');
+        
+        if (targetUrl) {
+          console.log('Loading from URL parameter:', targetUrl);
+          setManualUrl(targetUrl);
+          const result = await getArticleTextFromUrl(targetUrl);
+          setArticleText(result.text);
+          setVerificationUrl(result.url);
+          setStatusMessage(`Successfully loaded article from: ${result.url}`);
+        } else {
+          const result = await getArticleText();
+          setArticleText(result.text);
+          setVerificationUrl(result.url);
+          setStatusMessage(`Successfully loaded article from: ${result.url}`);
+        }
       } catch (error) {
         console.error('Failed to load article:', error);
         setArticleError('Couldn\'t retrieve article text automatically. Please paste the article content manually below.');
@@ -362,21 +375,57 @@ function App() {
       // Generate SHA-256 hash
       const hash = await sha256(articleText);
       
-      // In a real implementation, you would create a Solana transaction here
-      // For now, we'll simulate the transaction
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Create real Solana transaction
+      const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
+      
+      if (!Connection || !PublicKey || !Transaction || !SystemProgram) {
+        throw new Error('Solana Web3.js not properly loaded');
+      }
+
+      // Connect to Solana devnet (for testing)
+      const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+      
+      // Create a simple transaction that stores the hash in a memo
+      const transaction = new Transaction();
+      
+      // Add memo instruction with the hash and URL
+      const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}`;
+      const memoInstruction = {
+        programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2'),
+        keys: [],
+        data: Buffer.from(memoData, 'utf8')
+      };
+      transaction.add(memoInstruction);
+      
+      // Set recent blockhash
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = new PublicKey(wallet);
+      
+      // Request wallet to sign and send transaction
+      const { signature } = await window.solana.signAndSendTransaction(transaction);
+      
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, 'confirmed');
 
       setHashResult({
         hash: hash,
         url: verificationUrl,
-        transactionId: 'simulated_tx_' + Date.now(),
-        explorerUrl: `https://explorer.solana.com/tx/simulated_tx_${Date.now()}`
+        transactionId: signature,
+        explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=devnet`
       });
 
       setStatusMessage('Article successfully hashed to blockchain!');
     } catch (error) {
       console.error('Hashing failed:', error);
-      setStatusMessage('Failed to hash article. Please try again.');
+      
+      if (error.message.includes('User rejected')) {
+        setStatusMessage('Transaction was cancelled by user.');
+      } else if (error.message.includes('Insufficient funds')) {
+        setStatusMessage('Insufficient SOL balance. Please add some SOL to your wallet.');
+      } else {
+        setStatusMessage(`Failed to hash article: ${error.message}`);
+      }
     } finally {
       setIsHashing(false);
     }
@@ -617,7 +666,7 @@ function App() {
               ) : (
                 <Hash className="button-icon" />
               )}
-              {isHashing ? 'Hashing to Blockchain...' : 'Hash Article to Blockchain'}
+              {isHashing ? 'Creating Blockchain Transaction...' : `Hash Article to Blockchain (${currentPrice.toFixed(4)} SOL)`}
             </button>
           )}
 
