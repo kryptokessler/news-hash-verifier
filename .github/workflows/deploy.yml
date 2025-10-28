@@ -3,6 +3,7 @@ name: 🚀 Deploy React App to GitHub Pages
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -39,6 +40,9 @@ jobs:
 
       - name: 🏗️ Build project
         run: npm run build --legacy-peer-deps
+
+      - name: 📄 Add SPA fallback (404.html)
+        run: cp build/index.html build/404.html
 
       - name: 🌍 Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
