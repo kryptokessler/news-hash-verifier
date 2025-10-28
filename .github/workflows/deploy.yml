@@ -27,8 +27,9 @@ jobs:
 
       - name: 📦 Install dependencies (ignore peer deps)
         run: |
+          # Remove corrupted lock file if it exists and causes issues
           if [ -f package-lock.json ]; then
-            npm ci --legacy-peer-deps
+            npm ci --legacy-peer-deps || (echo "npm ci failed, regenerating lock file..." && rm package-lock.json && npm install --legacy-peer-deps)
           else
             npm install --legacy-peer-deps
           fi
