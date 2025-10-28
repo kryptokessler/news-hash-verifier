@@ -151,16 +151,53 @@ function App() {
       setStatusMessage(`Successfully loaded article from: ${result.url}`);
     } catch (error) {
       console.error('Failed to load article from URL:', error);
-      setArticleError('Couldn\'t retrieve article text from that URL. Please try a different URL or paste the content manually.');
+      
+      let errorMessage = 'Couldn\'t retrieve article text from that URL. ';
+      
+      if (error.message.includes('404')) {
+        errorMessage += 'The article page was not found (404 error). Please check the URL or try a different article.';
+      } else if (error.message.includes('CORS')) {
+        errorMessage += 'The website blocks cross-origin requests. Please try a different article or paste the content manually.';
+      } else if (error.message.includes('_wp_link_placeholder')) {
+        errorMessage += 'The URL contains WordPress placeholders. Please try the clean article URL without any placeholders.';
+      } else {
+        errorMessage += 'Please try a different URL or paste the content manually.';
+      }
+      
+      setArticleError(errorMessage);
       setStatusMessage('Failed to load article from URL. Please try again.');
     } finally {
       setIsLoadingArticle(false);
     }
   };
 
+  // Clean URL by removing common WordPress placeholders and malformed parts
+  const cleanUrl = (url) => {
+    try {
+      const urlObj = new URL(url);
+      
+      // Remove common WordPress placeholders and malformed path segments
+      const cleanPath = urlObj.pathname
+        .replace(/_wp_link_placeholder/g, '')
+        .replace(/\/+/g, '/') // Remove multiple slashes
+        .replace(/\/$/, ''); // Remove trailing slash
+      
+      urlObj.pathname = cleanPath;
+      return urlObj.toString();
+    } catch (error) {
+      console.error('Invalid URL:', url);
+      return url; // Return original if parsing fails
+    }
+  };
+
   // Extract article text from specific URL
   const getArticleTextFromUrl = async (url) => {
-    const response = await fetch(url, {
+    // Clean the URL first
+    const cleanUrlString = cleanUrl(url);
+    console.log('Original URL:', url);
+    console.log('Cleaned URL:', cleanUrlString);
+    
+    const response = await fetch(cleanUrlString, {
       mode: 'cors',
       headers: {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -168,7 +205,54 @@ function App() {
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // If cleaned URL fails, try the original URL
+      if (cleanUrlString !== url) {
+        console.log('Trying original URL as fallback...');
+        const fallbackResponse = await fetch(url, {
+          mode: 'cors',
+          headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          }
+        });
+        
+        if (fallbackResponse.ok) {
+          const html = await fallbackResponse.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          const selectors = [
+            'article p',
+            '.article p',
+            '.content p',
+            '.post p',
+            '.entry p',
+            'main p',
+            '.main p',
+            'p'
+          ];
+          
+          let paragraphs = [];
+          for (const selector of selectors) {
+            paragraphs = doc.querySelectorAll(selector);
+            if (paragraphs.length > 0) {
+              break;
+            }
+          }
+          
+          const articleText = Array.from(paragraphs)
+            .map(p => p.textContent.trim())
+            .filter(text => text.length > 20)
+            .join(' ');
+          
+          if (articleText.length === 0) {
+            throw new Error('No article content found');
+          }
+          
+          return { text: articleText, url: url };
+        }
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}. The article URL may be invalid or the page may not exist.`);
     }
     
     const html = await response.text();
@@ -203,7 +287,7 @@ function App() {
       throw new Error('No article content found');
     }
     
-    return { text: articleText, url: url };
+    return { text: articleText, url: cleanUrlString };
   };
 
   // Load article text on component mount
