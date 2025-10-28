@@ -16,14 +16,47 @@ async function sha256(text) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Extract article text from parent page
+// Extract article text from parent page or URL parameter
 async function getArticleText() {
   try {
-    // Get the parent page URL
-    const parentUrl = document.referrer || window.location.href;
-    console.log('Fetching article from:', parentUrl);
+    // Check for URL parameter first (for standalone usage)
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetUrl = urlParams.get('url');
     
-    // Fetch the parent page
+    let parentUrl;
+    if (targetUrl) {
+      parentUrl = targetUrl;
+      console.log('Using URL parameter:', parentUrl);
+    } else {
+      // Get the parent page URL - prioritize referrer for iframe context
+      parentUrl = document.referrer && document.referrer !== window.location.href 
+        ? document.referrer 
+        : window.location.href;
+      console.log('Current location:', window.location.href);
+      console.log('Document referrer:', document.referrer);
+      console.log('Using parent URL:', parentUrl);
+    }
+    
+    // If we're in an iframe and on the same domain, try to get content from parent window
+    if (!targetUrl && window.parent && window.parent !== window) {
+      try {
+        const parentDoc = window.parent.document;
+        const paragraphs = parentDoc.querySelectorAll('p, article p, .article p, .content p, .post p, .entry p');
+        const articleText = Array.from(paragraphs)
+          .map(p => p.textContent.trim())
+          .filter(text => text.length > 20) // Filter out very short text
+          .join(' ');
+        
+        if (articleText.length > 100) {
+          console.log('Extracted article text from parent window, length:', articleText.length);
+          return { text: articleText, url: parentUrl };
+        }
+      } catch (parentError) {
+        console.log('Could not access parent window:', parentError.message);
+      }
+    }
+    
+    // Fetch the target page
     const response = await fetch(parentUrl, {
       mode: 'cors',
       headers: {
@@ -41,11 +74,30 @@ async function getArticleText() {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
-    // Extract all paragraph text
-    const paragraphs = doc.querySelectorAll('p');
+    // Try multiple selectors for article content
+    const selectors = [
+      'article p',
+      '.article p',
+      '.content p',
+      '.post p',
+      '.entry p',
+      'main p',
+      '.main p',
+      'p'
+    ];
+    
+    let paragraphs = [];
+    for (const selector of selectors) {
+      paragraphs = doc.querySelectorAll(selector);
+      if (paragraphs.length > 0) {
+        console.log(`Found content using selector: ${selector}`);
+        break;
+      }
+    }
+    
     const articleText = Array.from(paragraphs)
       .map(p => p.textContent.trim())
-      .filter(text => text.length > 0)
+      .filter(text => text.length > 20) // Filter out very short text
       .join(' ');
     
     if (articleText.length === 0) {
@@ -71,6 +123,7 @@ function App() {
   const [articleError, setArticleError] = useState('');
   const [hashResult, setHashResult] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
+  const [manualUrl, setManualUrl] = useState('');
 
   // Bond curve pricing configuration
   const basePrice = 0.001; // SOL
@@ -79,6 +132,78 @@ function App() {
   // Calculate bond curve price
   const calculateBondPrice = (hashCount) => {
     return basePrice * Math.pow(priceMultiplier, hashCount);
+  };
+
+  // Load article from manual URL
+  const loadFromUrl = async () => {
+    if (!manualUrl.trim()) {
+      setStatusMessage('Please enter a URL to load article from.');
+      return;
+    }
+
+    try {
+      setIsLoadingArticle(true);
+      setArticleError('');
+      
+      const result = await getArticleTextFromUrl(manualUrl);
+      setArticleText(result.text);
+      setVerificationUrl(result.url);
+      setStatusMessage(`Successfully loaded article from: ${result.url}`);
+    } catch (error) {
+      console.error('Failed to load article from URL:', error);
+      setArticleError('Couldn\'t retrieve article text from that URL. Please try a different URL or paste the content manually.');
+      setStatusMessage('Failed to load article from URL. Please try again.');
+    } finally {
+      setIsLoadingArticle(false);
+    }
+  };
+
+  // Extract article text from specific URL
+  const getArticleTextFromUrl = async (url) => {
+    const response = await fetch(url, {
+      mode: 'cors',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    const selectors = [
+      'article p',
+      '.article p',
+      '.content p',
+      '.post p',
+      '.entry p',
+      'main p',
+      '.main p',
+      'p'
+    ];
+    
+    let paragraphs = [];
+    for (const selector of selectors) {
+      paragraphs = doc.querySelectorAll(selector);
+      if (paragraphs.length > 0) {
+        break;
+      }
+    }
+    
+    const articleText = Array.from(paragraphs)
+      .map(p => p.textContent.trim())
+      .filter(text => text.length > 20)
+      .join(' ');
+    
+    if (articleText.length === 0) {
+      throw new Error('No article content found');
+    }
+    
+    return { text: articleText, url: url };
   };
 
   // Load article text on component mount
@@ -94,8 +219,10 @@ function App() {
         setStatusMessage(`Successfully loaded article from: ${result.url}`);
       } catch (error) {
         console.error('Failed to load article:', error);
-        setArticleError('Couldn\'t retrieve article text — please paste manually.');
+        setArticleError('Couldn\'t retrieve article text automatically. Please paste the article content manually below.');
         setStatusMessage('Article auto-load failed. Please paste the article text manually.');
+        // Set a helpful placeholder
+        setArticleText('Paste the article content here...');
       } finally {
         setIsLoadingArticle(false);
       }
@@ -228,7 +355,7 @@ function App() {
               <div className="loading-state">
                 <Loader className="loading-spinner" />
                 <h2>Loading article...</h2>
-                <p>Extracting content from the parent page</p>
+                <p>Extracting content from the page</p>
               </div>
             ) : articleError ? (
               <div style={{ 
@@ -243,6 +370,51 @@ function App() {
                 {articleError}
               </div>
             ) : null}
+
+            {/* Manual URL Input */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '8px', 
+                fontWeight: '500', 
+                color: '#374151' 
+              }}>
+                Or enter article URL manually:
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="url"
+                  value={manualUrl}
+                  onChange={(e) => setManualUrl(e.target.value)}
+                  placeholder="https://example.com/article"
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    fontFamily: 'Inter, sans-serif'
+                  }}
+                />
+                <button
+                  onClick={loadFromUrl}
+                  disabled={isLoadingArticle || !manualUrl.trim()}
+                  style={{
+                    padding: '12px 20px',
+                    backgroundColor: '#6366f1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    opacity: isLoadingArticle || !manualUrl.trim() ? 0.6 : 1
+                  }}
+                >
+                  Load
+                </button>
+              </div>
+            </div>
 
             <div className="article-preview">
               <textarea
