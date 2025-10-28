@@ -382,8 +382,8 @@ function App() {
         throw new Error('Solana Web3.js not properly loaded');
       }
 
-      // Connect to Solana devnet (for testing)
-      const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+      // Connect to Solana mainnet
+      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
       
       // Create a simple transaction that stores the hash in a memo
       const transaction = new Transaction();
@@ -412,7 +412,7 @@ function App() {
         hash: hash,
         url: verificationUrl,
         transactionId: signature,
-        explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=devnet`
+        explorerUrl: `https://explorer.solana.com/tx/${signature}`
       });
 
       setStatusMessage('Article successfully hashed to blockchain!');
