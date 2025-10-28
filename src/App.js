@@ -144,6 +144,7 @@ function App() {
     try {
       setIsLoadingArticle(true);
       setArticleError('');
+      setStatusMessage(`Loading article from: ${manualUrl}`);
       
       const result = await getArticleTextFromUrl(manualUrl);
       setArticleText(result.text);
@@ -151,6 +152,11 @@ function App() {
       setStatusMessage(`Successfully loaded article from: ${result.url}`);
     } catch (error) {
       console.error('Failed to load article from URL:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        url: manualUrl
+      });
       
       let errorMessage = 'Couldn\'t retrieve article text from that URL. ';
       
@@ -160,8 +166,10 @@ function App() {
         errorMessage += 'The website blocks cross-origin requests. Please try a different article or paste the content manually.';
       } else if (error.message.includes('_wp_link_placeholder')) {
         errorMessage += 'The URL contains WordPress placeholders. Please try the clean article URL without any placeholders.';
+      } else if (error.message.includes('Failed to fetch')) {
+        errorMessage += 'Network error - the website may be down or unreachable. Please try again later.';
       } else {
-        errorMessage += 'Please try a different URL or paste the content manually.';
+        errorMessage += `Error: ${error.message}. Please try a different URL or paste the content manually.`;
       }
       
       setArticleError(errorMessage);
@@ -470,7 +478,7 @@ function App() {
                   type="url"
                   value={manualUrl}
                   onChange={(e) => setManualUrl(e.target.value)}
-                  placeholder="https://example.com/article"
+                  placeholder="https://nobot.news/article"
                   style={{
                     flex: 1,
                     padding: '12px',
@@ -497,6 +505,52 @@ function App() {
                 >
                   Load
                 </button>
+              </div>
+              
+              {/* Test URLs */}
+              <div style={{ marginTop: '12px', fontSize: '0.8rem', color: '#6b7280' }}>
+                <div style={{ marginBottom: '8px' }}>Try these test URLs:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  <button
+                    onClick={() => setManualUrl('https://httpbin.org/html')}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Test HTML
+                  </button>
+                  <button
+                    onClick={() => setManualUrl('https://jsonplaceholder.typicode.com/posts/1')}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Test JSON
+                  </button>
+                  <button
+                    onClick={() => setManualUrl('https://nobot.news')}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    nobot.news
+                  </button>
+                </div>
               </div>
             </div>
 
