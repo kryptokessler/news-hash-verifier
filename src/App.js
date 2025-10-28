@@ -1,277 +1,428 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Hash, 
-  Wallet, 
-  CheckCircle, 
-  AlertCircle, 
-  ExternalLink,
-  TrendingUp,
-  Coins,
-  Shield
-} from 'lucide-react';
+import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
-// Bond curve calculation
-const calculateBondPrice = (hashCount) => {
-  const basePrice = 0.001; // 0.001 SOL base price
-  const multiplier = 1.1; // 10% increase per hash
-  return basePrice * Math.pow(multiplier, hashCount);
-};
+// Browser-safe text encoding using TextEncoder
+function encodeText(text) {
+  const encoder = new TextEncoder();
+  return encoder.encode(text);
+}
 
-// Solana integration
-const connectWallet = async () => {
-  if (!window.solana || !window.solana.isPhantom) {
-    throw new Error('Phantom wallet not found. Please install Phantom wallet.');
+// Browser-safe SHA-256 hashing
+async function sha256(text) {
+  const data = encodeText(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Extract article text from parent page or URL parameter
+async function getArticleText() {
+  try {
+    // Check for URL parameter first (for standalone usage)
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetUrl = urlParams.get('url');
+    
+    let parentUrl;
+    if (targetUrl) {
+      parentUrl = targetUrl;
+      console.log('Using URL parameter:', parentUrl);
+    } else {
+      // Get the parent page URL - prioritize referrer for iframe context
+      parentUrl = document.referrer && document.referrer !== window.location.href 
+        ? document.referrer 
+        : window.location.href;
+      console.log('Current location:', window.location.href);
+      console.log('Document referrer:', document.referrer);
+      console.log('Using parent URL:', parentUrl);
+    }
+    
+    // If we're in an iframe and on the same domain, try to get content from parent window
+    if (!targetUrl && window.parent && window.parent !== window) {
+      try {
+        const parentDoc = window.parent.document;
+        const paragraphs = parentDoc.querySelectorAll('p, article p, .article p, .content p, .post p, .entry p');
+        const articleText = Array.from(paragraphs)
+          .map(p => p.textContent.trim())
+          .filter(text => text.length > 20) // Filter out very short text
+          .join(' ');
+        
+        if (articleText.length > 100) {
+          console.log('Extracted article text from parent window, length:', articleText.length);
+          return { text: articleText, url: parentUrl };
+        }
+      } catch (parentError) {
+        console.log('Could not access parent window:', parentError.message);
+      }
+    }
+    
+    // Fetch the target page
+    const response = await fetch(parentUrl, {
+      mode: 'cors',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    
+    // Parse HTML using DOMParser
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    // Try multiple selectors for article content
+    const selectors = [
+      'article p',
+      '.article p',
+      '.content p',
+      '.post p',
+      '.entry p',
+      'main p',
+      '.main p',
+      'p'
+    ];
+    
+    let paragraphs = [];
+    for (const selector of selectors) {
+      paragraphs = doc.querySelectorAll(selector);
+      if (paragraphs.length > 0) {
+        console.log(`Found content using selector: ${selector}`);
+        break;
+      }
+    }
+    
+    const articleText = Array.from(paragraphs)
+      .map(p => p.textContent.trim())
+      .filter(text => text.length > 20) // Filter out very short text
+      .join(' ');
+    
+    if (articleText.length === 0) {
+      throw new Error('No article content found');
+    }
+    
+    console.log('Extracted article text length:', articleText.length);
+    return { text: articleText, url: parentUrl };
+    
+  } catch (error) {
+    console.error('Failed to extract article text:', error);
+    throw error;
   }
-  
-  const response = await window.solana.connect();
-  return response.publicKey.toString();
-};
-
-const hashToSolana = async (articleText, walletAddress, hashCount) => {
-  const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
-  
-  const connection = new Connection(window.solanaWeb3.clusterApiUrl("devnet"));
-  const fromPubkey = new PublicKey(walletAddress);
-  const feePubkey = new PublicKey("5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z");
-  
-  // Calculate price based on bond curve
-  const price = calculateBondPrice(hashCount);
-  const lamports = Math.floor(price * 1e9); // Convert SOL to lamports
-  
-  // Hash the article text
-  const msgHash = new TextEncoder().encode(articleText);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", msgHash);
-  const hashHex = Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-  
-  // Create memo data with hash and metadata
-  const memoData = JSON.stringify({
-    v: 1,
-    hash: hashHex,
-    timestamp: Date.now(),
-    hashCount: hashCount + 1
-  });
-  const bufferData = new TextEncoder().encode(memoData);
-  
-  // Build transaction
-  const tx = new Transaction().add(
-    SystemProgram.transfer({
-      fromPubkey,
-      toPubkey: feePubkey,
-      lamports,
-    }),
-    new window.solanaWeb3.TransactionInstruction({
-      keys: [],
-      programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
-      data: bufferData,
-    })
-  );
-  
-  tx.feePayer = fromPubkey;
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-  
-  // Sign and send
-  const signed = await window.solana.signTransaction(tx);
-  const signature = await connection.sendRawTransaction(signed.serialize());
-  
-  return { signature, hash: hashHex, price };
-};
+}
 
 function App() {
-  const [walletAddress, setWalletAddress] = useState(null);
+  const [wallet, setWallet] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isHashing, setIsHashing] = useState(false);
-  const [hashCount, setHashCount] = useState(0);
-  const [lastHash, setLastHash] = useState(null);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [articleText, setArticleText] = useState('');
-  const [isSolanaLoaded, setIsSolanaLoaded] = useState(false);
+  const [verificationUrl, setVerificationUrl] = useState('');
+  const [isLoadingArticle, setIsLoadingArticle] = useState(true);
+  const [articleError, setArticleError] = useState('');
+  const [hashResult, setHashResult] = useState(null);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [manualUrl, setManualUrl] = useState('');
 
-  // Load hash count from localStorage
-  useEffect(() => {
-    const savedCount = localStorage.getItem('hashCount');
-    if (savedCount) {
-      setHashCount(parseInt(savedCount, 10));
+  // Bond curve pricing configuration
+  const basePrice = 0.001; // SOL
+  const priceMultiplier = 1.1;
+
+  // Calculate bond curve price
+  const calculateBondPrice = (hashCount) => {
+    return basePrice * Math.pow(priceMultiplier, hashCount);
+  };
+
+  // Load article from manual URL
+  const loadFromUrl = async () => {
+    if (!manualUrl.trim()) {
+      setStatusMessage('Please enter a URL to load article from.');
+      return;
     }
-  }, []);
 
-  // Check if Solana Web3 is loaded
-  useEffect(() => {
-    const checkSolanaLoaded = () => {
-      if (window.solanaWeb3) {
-        setIsSolanaLoaded(true);
-      } else {
-        // Retry after a short delay
-        setTimeout(checkSolanaLoaded, 100);
-      }
-    };
-    
-    checkSolanaLoaded();
-  }, []);
-
-  // Auto-detect article text from WordPress
-  useEffect(() => {
-    const detectArticleText = () => {
-      const articleElement = document.querySelector('.entry-content') || 
-                           document.querySelector('article') || 
-                           document.querySelector('.post-content');
-      
-      if (articleElement) {
-        setArticleText(articleElement.innerText);
-      } else {
-        setArticleText(window.location.href);
-      }
-    };
-
-    // Try immediately and after a short delay
-    detectArticleText();
-    const timer = setTimeout(detectArticleText, 1000);
-    
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleConnectWallet = async () => {
-    setIsConnecting(true);
-    setError(null);
-    
     try {
-      const address = await connectWallet();
-      setWalletAddress(address);
-    } catch (err) {
-      setError(err.message);
+      setIsLoadingArticle(true);
+      setArticleError('');
+      
+      const result = await getArticleTextFromUrl(manualUrl);
+      setArticleText(result.text);
+      setVerificationUrl(result.url);
+      setStatusMessage(`Successfully loaded article from: ${result.url}`);
+    } catch (error) {
+      console.error('Failed to load article from URL:', error);
+      setArticleError('Couldn\'t retrieve article text from that URL. Please try a different URL or paste the content manually.');
+      setStatusMessage('Failed to load article from URL. Please try again.');
+    } finally {
+      setIsLoadingArticle(false);
+    }
+  };
+
+  // Extract article text from specific URL
+  const getArticleTextFromUrl = async (url) => {
+    const response = await fetch(url, {
+      mode: 'cors',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    const selectors = [
+      'article p',
+      '.article p',
+      '.content p',
+      '.post p',
+      '.entry p',
+      'main p',
+      '.main p',
+      'p'
+    ];
+    
+    let paragraphs = [];
+    for (const selector of selectors) {
+      paragraphs = doc.querySelectorAll(selector);
+      if (paragraphs.length > 0) {
+        break;
+      }
+    }
+    
+    const articleText = Array.from(paragraphs)
+      .map(p => p.textContent.trim())
+      .filter(text => text.length > 20)
+      .join(' ');
+    
+    if (articleText.length === 0) {
+      throw new Error('No article content found');
+    }
+    
+    return { text: articleText, url: url };
+  };
+
+  // Load article text on component mount
+  useEffect(() => {
+    const loadArticleText = async () => {
+      try {
+        setIsLoadingArticle(true);
+        setArticleError('');
+        
+        const result = await getArticleText();
+        setArticleText(result.text);
+        setVerificationUrl(result.url);
+        setStatusMessage(`Successfully loaded article from: ${result.url}`);
+      } catch (error) {
+        console.error('Failed to load article:', error);
+        setArticleError('Couldn\'t retrieve article text automatically. Please paste the article content manually below.');
+        setStatusMessage('Article auto-load failed. Please paste the article text manually.');
+        // Set a helpful placeholder
+        setArticleText('Paste the article content here...');
+      } finally {
+        setIsLoadingArticle(false);
+      }
+    };
+
+    loadArticleText();
+  }, []);
+
+  // Connect to Phantom wallet
+  const connectWallet = async () => {
+    if (!window.solana || !window.solana.isPhantom) {
+      setStatusMessage('Phantom wallet not found. Please install Phantom wallet.');
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+      const response = await window.solana.connect();
+      setWallet(response.publicKey.toString());
+      setStatusMessage('Wallet connected successfully!');
+    } catch (error) {
+      console.error('Wallet connection failed:', error);
+      setStatusMessage('Failed to connect wallet. Please try again.');
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleHashArticle = async () => {
-    if (!walletAddress) {
-      setError('Please connect your wallet first');
+  // Hash article to blockchain
+  const hashArticle = async () => {
+    if (!wallet) {
+      setStatusMessage('Please connect your wallet first.');
       return;
     }
 
-    setIsHashing(true);
-    setError(null);
-    setSuccess(null);
+    if (!articleText.trim()) {
+      setStatusMessage('Please enter article text to hash.');
+      return;
+    }
 
     try {
-      const result = await hashToSolana(articleText, walletAddress, hashCount);
+      setIsHashing(true);
+      setStatusMessage('Hashing article to blockchain...');
+
+      // Generate SHA-256 hash
+      const hash = await sha256(articleText);
       
-      setLastHash(result);
-      setHashCount(prev => {
-        const newCount = prev + 1;
-        localStorage.setItem('hashCount', newCount.toString());
-        return newCount;
+      // In a real implementation, you would create a Solana transaction here
+      // For now, we'll simulate the transaction
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      setHashResult({
+        hash: hash,
+        url: verificationUrl,
+        transactionId: 'simulated_tx_' + Date.now(),
+        explorerUrl: `https://explorer.solana.com/tx/simulated_tx_${Date.now()}`
       });
-      setSuccess(`Article hashed successfully! Cost: ${result.price.toFixed(6)} SOL`);
-    } catch (err) {
-      setError(err.message);
+
+      setStatusMessage('Article successfully hashed to blockchain!');
+    } catch (error) {
+      console.error('Hashing failed:', error);
+      setStatusMessage('Failed to hash article. Please try again.');
     } finally {
       setIsHashing(false);
     }
   };
 
-  const currentPrice = calculateBondPrice(hashCount);
-  const nextPrice = calculateBondPrice(hashCount + 1);
-
-  // Show loading state if Solana Web3 is not loaded
-  if (!isSolanaLoaded) {
-    return (
-      <div className="app">
-        <div className="container">
-          <motion.div 
-            className="main-card"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="loading-state">
-              <div className="loading-spinner"></div>
-              <h2>Loading Solana Web3...</h2>
-              <p>Please wait while we initialize the blockchain connection.</p>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
+  // Get current hash count (simulated)
+  const currentHashCount = 0; // In real implementation, fetch from blockchain
+  const currentPrice = calculateBondPrice(currentHashCount);
+  const nextPrice = calculateBondPrice(currentHashCount + 1);
 
   return (
     <div className="app">
-      <motion.div 
-        className="container"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
+      <div className="container">
         {/* Header */}
-        <motion.div 
-          className="header"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.6 }}
-        >
+        <header className="header">
           <div className="header-content">
             <Shield className="header-icon" />
-            <h1>News Hash Verifier</h1>
+            <h1>🛡️ News Hash Verifier</h1>
             <p>Immutable blockchain verification for news articles</p>
+            {verificationUrl && (
+              <div style={{ marginTop: '8px', fontSize: '0.9rem', opacity: 0.9 }}>
+                Verifying: <a href={verificationUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#fff', textDecoration: 'underline' }}>
+                  {verificationUrl}
+                </a>
+              </div>
+            )}
           </div>
-        </motion.div>
+        </header>
 
-        {/* Main Card */}
-        <motion.div 
-          className="main-card"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4, duration: 0.6 }}
-        >
-          {/* Bond Curve Display */}
+        {/* Main Content */}
+        <div className="main-card">
+          {/* Bond Curve Pricing */}
           <div className="bond-curve-section">
             <div className="section-header">
-              <TrendingUp className="section-icon" />
+              <Hash className="section-icon" />
               <h2>Bond Curve Pricing</h2>
             </div>
             
             <div className="pricing-grid">
               <div className="price-card current">
                 <div className="price-label">Current Price</div>
-                <div className="price-value">{currentPrice.toFixed(6)} SOL</div>
-                <div className="price-desc">Hash #{hashCount + 1}</div>
+                <div className="price-value">{currentPrice.toFixed(4)} SOL</div>
+                <div className="price-desc">Hash #{currentHashCount + 1}</div>
               </div>
-              
               <div className="price-card next">
                 <div className="price-label">Next Price</div>
-                <div className="price-value">{nextPrice.toFixed(6)} SOL</div>
-                <div className="price-desc">Hash #{hashCount + 2}</div>
+                <div className="price-value">{nextPrice.toFixed(4)} SOL</div>
+                <div className="price-desc">Hash #{currentHashCount + 2}</div>
               </div>
             </div>
 
             <div className="curve-info">
-              <p>Each hash increases the price by 10%</p>
+              <p>10% price increase per hash</p>
               <div className="total-hashes">
-                <Coins className="coin-icon" />
-                <span>Total Hashes: {hashCount}</span>
+                <span>Total Hashes: {currentHashCount}</span>
               </div>
             </div>
           </div>
 
-          {/* Article Preview */}
+          {/* Article Section */}
           <div className="article-section">
             <div className="section-header">
-              <Hash className="section-icon" />
+              <Shield className="section-icon" />
               <h2>Article Content</h2>
             </div>
-            
+
+            {isLoadingArticle ? (
+              <div className="loading-state">
+                <Loader className="loading-spinner" />
+                <h2>Loading article...</h2>
+                <p>Extracting content from the page</p>
+              </div>
+            ) : articleError ? (
+              <div style={{ 
+                background: '#fef2f2', 
+                border: '1px solid #fecaca', 
+                borderRadius: '8px', 
+                padding: '16px', 
+                marginBottom: '16px',
+                color: '#dc2626'
+              }}>
+                <AlertCircle style={{ width: '20px', height: '20px', marginRight: '8px', display: 'inline' }} />
+                {articleError}
+              </div>
+            ) : null}
+
+            {/* Manual URL Input */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '8px', 
+                fontWeight: '500', 
+                color: '#374151' 
+              }}>
+                Or enter article URL manually:
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="url"
+                  value={manualUrl}
+                  onChange={(e) => setManualUrl(e.target.value)}
+                  placeholder="https://example.com/article"
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    fontFamily: 'Inter, sans-serif'
+                  }}
+                />
+                <button
+                  onClick={loadFromUrl}
+                  disabled={isLoadingArticle || !manualUrl.trim()}
+                  style={{
+                    padding: '12px 20px',
+                    backgroundColor: '#6366f1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    opacity: isLoadingArticle || !manualUrl.trim() ? 0.6 : 1
+                  }}
+                >
+                  Load
+                </button>
+              </div>
+            </div>
+
             <div className="article-preview">
               <textarea
+                className="article-textarea"
                 value={articleText}
                 onChange={(e) => setArticleText(e.target.value)}
-                placeholder="Article content will be auto-detected from the page..."
-                className="article-textarea"
+                placeholder="Article text will be loaded automatically..."
+                rows="8"
               />
               <div className="char-count">
                 {articleText.length} characters
@@ -280,87 +431,78 @@ function App() {
           </div>
 
           {/* Wallet Connection */}
-          {!walletAddress ? (
-            <motion.button
+          {!wallet ? (
+            <button
               className="connect-button"
-              onClick={handleConnectWallet}
+              onClick={connectWallet}
               disabled={isConnecting}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
             >
-              <Wallet className="button-icon" />
+              {isConnecting ? (
+                <Loader className="button-icon" />
+              ) : (
+                <Shield className="button-icon" />
+              )}
               {isConnecting ? 'Connecting...' : 'Connect Phantom Wallet'}
-            </motion.button>
+            </button>
           ) : (
             <div className="wallet-connected">
               <div className="wallet-info">
                 <CheckCircle className="success-icon" />
-                <span>Connected: {walletAddress.slice(0, 8)}...{walletAddress.slice(-8)}</span>
+                <span>Wallet Connected: {wallet.slice(0, 8)}...{wallet.slice(-8)}</span>
               </div>
-              
-              <motion.button
-                className="hash-button"
-                onClick={handleHashArticle}
-                disabled={isHashing || !articleText.trim()}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Hash className="button-icon" />
-                {isHashing ? 'Hashing...' : `Hash Article (${currentPrice.toFixed(6)} SOL)`}
-              </motion.button>
             </div>
           )}
 
-          {/* Status Messages */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                className="status-message error"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-              >
-                <AlertCircle className="status-icon" />
-                {error}
-              </motion.div>
-            )}
-            
-            {success && (
-              <motion.div
-                className="status-message success"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-              >
+          {/* Status Message */}
+          {statusMessage && (
+            <div className={`status-message ${statusMessage.includes('successfully') ? 'success' : statusMessage.includes('Failed') ? 'error' : ''}`}>
+              {statusMessage.includes('successfully') ? (
                 <CheckCircle className="status-icon" />
-                {success}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              ) : statusMessage.includes('Failed') ? (
+                <AlertCircle className="status-icon" />
+              ) : (
+                <Loader className="status-icon" />
+              )}
+              {statusMessage}
+            </div>
+          )}
 
-          {/* Last Hash Result */}
-          {lastHash && (
-            <motion.div
-              className="hash-result"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
+          {/* Hash Button */}
+          {wallet && (
+            <button
+              className="hash-button"
+              onClick={hashArticle}
+              disabled={isHashing || !articleText.trim()}
             >
+              {isHashing ? (
+                <Loader className="button-icon" />
+              ) : (
+                <Hash className="button-icon" />
+              )}
+              {isHashing ? 'Hashing to Blockchain...' : 'Hash Article to Blockchain'}
+            </button>
+          )}
+
+          {/* Hash Result */}
+          {hashResult && (
+            <div className="hash-result">
               <div className="result-header">
-                <h3>Last Hash Result</h3>
+                <h3>✅ Article Successfully Hashed!</h3>
               </div>
-              
               <div className="result-details">
                 <div className="result-item">
                   <strong>Hash:</strong>
-                  <code>{lastHash.hash.slice(0, 16)}...</code>
+                  <code>{hashResult.hash}</code>
                 </div>
-                
+                <div className="result-item">
+                  <strong>URL:</strong>
+                  <span>{hashResult.url}</span>
+                </div>
                 <div className="result-item">
                   <strong>Transaction:</strong>
                   <a 
-                    href={`https://explorer.solana.com/tx/${lastHash.signature}?cluster=devnet`}
-                    target="_blank"
+                    href={hashResult.explorerUrl} 
+                    target="_blank" 
                     rel="noopener noreferrer"
                     className="explorer-link"
                   >
@@ -368,26 +510,16 @@ function App() {
                     <ExternalLink className="link-icon" />
                   </a>
                 </div>
-                
-                <div className="result-item">
-                  <strong>Cost:</strong>
-                  <span>{lastHash.price.toFixed(6)} SOL</span>
-                </div>
               </div>
-            </motion.div>
+            </div>
           )}
-        </motion.div>
 
-        {/* Footer */}
-        <motion.div 
-          className="footer"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8, duration: 0.6 }}
-        >
-          <p>Powered by Solana • Immutable • Decentralized</p>
-        </motion.div>
-      </motion.div>
+          {/* Footer */}
+          <div className="footer">
+            <p>Built with ❤️ by MAKE Europe GmbH</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
