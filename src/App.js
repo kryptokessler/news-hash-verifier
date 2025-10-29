@@ -394,10 +394,12 @@ function App() {
       console.log('Phantom connection response:', response);
       console.log('PublicKey object:', response.publicKey);
       console.log('PublicKey type:', typeof response.publicKey);
+      console.log('PublicKey methods:', Object.getOwnPropertyNames(response.publicKey));
       
       // Persist both string and PublicKey object
       const pkString = response.publicKey.toBase58 ? response.publicKey.toBase58() : response.publicKey.toString();
       console.log('PublicKey string:', pkString);
+      console.log('PublicKey string length:', pkString.length);
       
       setWallet(pkString);
       setWalletPublicKeyObj(response.publicKey);
@@ -429,6 +431,8 @@ function App() {
       console.log('Wallet state:', { wallet, walletPublicKeyObj });
       console.log('Wallet type:', typeof wallet);
       console.log('WalletPublicKeyObj type:', typeof walletPublicKeyObj);
+      console.log('Wallet value:', wallet);
+      console.log('WalletPublicKeyObj value:', walletPublicKeyObj);
 
       // Generate SHA-256 hash
       const hash = await sha256(articleText);
@@ -452,20 +456,23 @@ function App() {
       let feePayerPk;
       try {
         // Prefer Phantom's PublicKey object when available
-        if (walletPublicKeyObj) {
+        if (walletPublicKeyObj && walletPublicKeyObj.toBase58) {
+          console.log('Using Phantom PublicKey object');
           feePayerPk = walletPublicKeyObj;
-        } else if (wallet) {
+        } else if (wallet && typeof wallet === 'string' && wallet.length > 0) {
+          console.log('Creating PublicKey from wallet string:', wallet);
           // Validate the wallet string is a valid base58 public key
           feePayerPk = new PublicKey(wallet);
         } else {
-          throw new Error('No wallet connected');
+          throw new Error('No valid wallet connected');
         }
         
+        console.log('Fee payer public key:', feePayerPk.toBase58());
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = feePayerPk;
       } catch (pkErr) {
-        console.error('Invalid wallet public key:', wallet, pkErr);
+        console.error('Invalid wallet public key:', { wallet, walletPublicKeyObj, error: pkErr });
         setStatusMessage('Invalid wallet public key. Please reconnect your wallet.');
         setIsHashing(false);
         return;
