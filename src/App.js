@@ -396,13 +396,17 @@ function App() {
       console.log('PublicKey type:', typeof response.publicKey);
       console.log('PublicKey methods:', Object.getOwnPropertyNames(response.publicKey));
       
-      // Persist both string and PublicKey object
+      // Convert Phantom's custom PublicKey to Solana PublicKey
       const pkString = response.publicKey.toBase58 ? response.publicKey.toBase58() : response.publicKey.toString();
       console.log('PublicKey string:', pkString);
       console.log('PublicKey string length:', pkString.length);
       
+      // Create a proper Solana PublicKey from the string
+      const solanaPublicKey = new PublicKey(pkString);
+      console.log('Created Solana PublicKey:', solanaPublicKey.toBase58());
+      
       setWallet(pkString);
-      setWalletPublicKeyObj(response.publicKey);
+      setWalletPublicKeyObj(solanaPublicKey);
       setStatusMessage('Wallet connected successfully!');
     } catch (error) {
       console.error('Wallet connection failed:', error);
@@ -455,13 +459,12 @@ function App() {
       // Validate wallet public key and set fee payer
       let feePayerPk;
       try {
-        // Prefer Phantom's PublicKey object when available
+        // Use the Solana PublicKey object we created during connection
         if (walletPublicKeyObj && walletPublicKeyObj.toBase58) {
-          console.log('Using Phantom PublicKey object');
+          console.log('Using Solana PublicKey object');
           feePayerPk = walletPublicKeyObj;
         } else if (wallet && typeof wallet === 'string' && wallet.length > 0) {
           console.log('Creating PublicKey from wallet string:', wallet);
-          // Validate the wallet string is a valid base58 public key
           feePayerPk = new PublicKey(wallet);
         } else {
           throw new Error('No valid wallet connected');
