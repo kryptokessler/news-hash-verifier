@@ -22,6 +22,15 @@ A beautiful React component that allows readers to hash news articles to the Sol
 - Visual pricing display with current/next price
 - Earning mechanism for early adopters
 
+## Usage on live web pages 
+
+<button onclick="(async ()=> {
+  const url = document.getElementById('articleUrl').value;
+  const text = await fetchArticleText(url); // or paste text directly
+  await hashArticleAndPay(text);
+})()">Hash & Pay</button>
+
+
 ### 🛡️ Security Features
 - SHA-256 article hashing
 - Immutable blockchain storage

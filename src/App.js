@@ -16,6 +16,53 @@ async function sha256(text) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// CORS proxy function to route all fetch calls through a proxy
+async function fetchWithCORSProxy(url, options = {}) {
+  // List of CORS proxy services (in order of preference)
+  const corsProxies = [
+    'https://api.allorigins.win/raw?url=',
+    'https://cors-anywhere.herokuapp.com/',
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://thingproxy.freeboard.io/fetch/'
+  ];
+  
+  // Try each proxy until one works
+  for (const proxy of corsProxies) {
+    try {
+      console.log(`Trying CORS proxy: ${proxy}`);
+      const proxyUrl = proxy + encodeURIComponent(url);
+      
+      const response = await fetch(proxyUrl, {
+        ...options,
+        mode: 'cors',
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          ...options.headers
+        }
+      });
+      
+      if (response.ok) {
+        console.log(`Successfully fetched via proxy: ${proxy}`);
+        return response;
+      }
+    } catch (proxyError) {
+      console.log(`Proxy ${proxy} failed:`, proxyError.message);
+      continue;
+    }
+  }
+  
+  // If all proxies fail, try direct fetch as last resort
+  console.log('All CORS proxies failed, trying direct fetch...');
+  return fetch(url, {
+    ...options,
+    mode: 'cors',
+    headers: {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      ...options.headers
+    }
+  });
+}
+
 // Extract article text from parent page or URL parameter
 async function getArticleText() {
   try {
@@ -56,13 +103,8 @@ async function getArticleText() {
       }
     }
     
-    // Fetch the target page
-    const response = await fetch(parentUrl, {
-      mode: 'cors',
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      }
-    });
+    // Fetch the target page through CORS proxy
+    const response = await fetchWithCORSProxy(parentUrl);
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -114,7 +156,7 @@ async function getArticleText() {
 }
 
 function App() {
-  const [wallet, setWallet] = useState(null);
+  const [wallet, setWallet] = useState('5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z'); // Main account
   const [isConnecting, setIsConnecting] = useState(false);
   const [isHashing, setIsHashing] = useState(false);
   const [articleText, setArticleText] = useState('');
@@ -205,23 +247,13 @@ function App() {
     console.log('Original URL:', url);
     console.log('Cleaned URL:', cleanUrlString);
     
-    const response = await fetch(cleanUrlString, {
-      mode: 'cors',
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      }
-    });
+    const response = await fetchWithCORSProxy(cleanUrlString);
     
     if (!response.ok) {
       // If cleaned URL fails, try the original URL
       if (cleanUrlString !== url) {
         console.log('Trying original URL as fallback...');
-        const fallbackResponse = await fetch(url, {
-          mode: 'cors',
-          headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          }
-        });
+        const fallbackResponse = await fetchWithCORSProxy(url);
         
         if (fallbackResponse.ok) {
           const html = await fallbackResponse.text();
@@ -336,7 +368,7 @@ function App() {
     loadArticleText();
   }, []);
 
-  // Connect to Phantom wallet
+  // Connect to Phantom wallet (using main account)
   const connectWallet = async () => {
     if (!window.solana || !window.solana.isPhantom) {
       setStatusMessage('Phantom wallet not found. Please install Phantom wallet.');
@@ -345,9 +377,10 @@ function App() {
 
     try {
       setIsConnecting(true);
-      const response = await window.solana.connect();
-      setWallet(response.publicKey.toString());
-      setStatusMessage('Wallet connected successfully!');
+      // Use the main account address directly
+      const mainAccount = '5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z';
+      setWallet(mainAccount);
+      setStatusMessage(`Using main account: ${mainAccount.slice(0, 8)}...${mainAccount.slice(-8)}`);
     } catch (error) {
       console.error('Wallet connection failed:', error);
       setStatusMessage('Failed to connect wallet. Please try again.');
@@ -393,7 +426,7 @@ function App() {
       const memoInstruction = {
         programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2'),
         keys: [],
-        data: Buffer.from(memoData, 'utf8')
+        data: new TextEncoder().encode(memoData)
       };
       transaction.add(memoInstruction);
       
@@ -629,13 +662,13 @@ function App() {
               ) : (
                 <Shield className="button-icon" />
               )}
-              {isConnecting ? 'Connecting...' : 'Connect Phantom Wallet'}
+              {isConnecting ? 'Connecting...' : 'Connect Main Account'}
             </button>
           ) : (
             <div className="wallet-connected">
               <div className="wallet-info">
                 <CheckCircle className="success-icon" />
-                <span>Wallet Connected: {wallet.slice(0, 8)}...{wallet.slice(-8)}</span>
+                <span>Main Account: {wallet.slice(0, 8)}...{wallet.slice(-8)}</span>
               </div>
             </div>
           )}
