@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
@@ -252,7 +252,7 @@ function App() {
   };
 
   // Extract article text from specific URL
-  const getArticleTextFromUrl = async (url) => {
+  const getArticleTextFromUrl = useCallback(async (url) => {
     // Clean the URL first
     const cleanUrlString = cleanUrl(url);
     console.log('Original URL:', url);
@@ -343,10 +343,9 @@ function App() {
     }
     
     return { text: articleText, url: cleanUrlString };
-  };
+  }, []);
 
   // Load article text on component mount (only if URL parameter is provided)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const loadArticleText = async () => {
       try {
@@ -380,7 +379,7 @@ function App() {
     };
 
     loadArticleText();
-  }, []);
+  }, [getArticleTextFromUrl]);
 
   // Connect to Phantom wallet (fee payer = connected wallet)
   const connectWallet = async () => {
