@@ -394,8 +394,14 @@ function App() {
     try {
       setIsConnecting(true);
       const response = await window.solana.connect();
+      console.log('Phantom connection response:', response);
+      console.log('PublicKey object:', response.publicKey);
+      console.log('PublicKey type:', typeof response.publicKey);
+      
       // Persist both string and PublicKey object
       const pkString = response.publicKey.toBase58 ? response.publicKey.toBase58() : response.publicKey.toString();
+      console.log('PublicKey string:', pkString);
+      
       setWallet(pkString);
       setWalletPublicKeyObj(response.publicKey);
       setStatusMessage('Wallet connected successfully!');
@@ -422,6 +428,10 @@ function App() {
     try {
       setIsHashing(true);
       setStatusMessage('Hashing article to blockchain...');
+      
+      console.log('Wallet state:', { wallet, walletPublicKeyObj });
+      console.log('Wallet type:', typeof wallet);
+      console.log('WalletPublicKeyObj type:', typeof walletPublicKeyObj);
 
       // Generate SHA-256 hash
       const hash = await sha256(articleText);
@@ -442,9 +452,18 @@ function App() {
       transaction.add(memoIx);
       
       // Validate wallet public key and set fee payer
+      let feePayerPk;
       try {
         // Prefer Phantom's PublicKey object when available
-        const feePayerPk = walletPublicKeyObj || new PublicKey(wallet);
+        if (walletPublicKeyObj) {
+          feePayerPk = walletPublicKeyObj;
+        } else if (wallet) {
+          // Validate the wallet string is a valid base58 public key
+          feePayerPk = new PublicKey(wallet);
+        } else {
+          throw new Error('No wallet connected');
+        }
+        
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = feePayerPk;
