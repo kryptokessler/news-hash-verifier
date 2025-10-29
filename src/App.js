@@ -156,7 +156,8 @@ async function getArticleText() {
 }
 
 function App() {
-  const [wallet, setWallet] = useState('5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z'); // Main account
+  const MAIN_ACCOUNT = 'BmT4QKawfG3zV3G36URMGdxWx734AJC2zp7XedZiApyV';
+  const [wallet, setWallet] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isHashing, setIsHashing] = useState(false);
   const [articleText, setArticleText] = useState('');
@@ -331,6 +332,7 @@ function App() {
   };
 
   // Load article text on component mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const loadArticleText = async () => {
       try {
@@ -368,7 +370,7 @@ function App() {
     loadArticleText();
   }, []);
 
-  // Connect to Phantom wallet (using main account)
+  // Connect to Phantom wallet (fee payer = connected wallet)
   const connectWallet = async () => {
     if (!window.solana || !window.solana.isPhantom) {
       setStatusMessage('Phantom wallet not found. Please install Phantom wallet.');
@@ -377,10 +379,9 @@ function App() {
 
     try {
       setIsConnecting(true);
-      // Use the main account address directly
-      const mainAccount = '5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z';
-      setWallet(mainAccount);
-      setStatusMessage(`Using main account: ${mainAccount.slice(0, 8)}...${mainAccount.slice(-8)}`);
+      const response = await window.solana.connect();
+      setWallet(response.publicKey.toString());
+      setStatusMessage('Wallet connected successfully!');
     } catch (error) {
       console.error('Wallet connection failed:', error);
       setStatusMessage('Failed to connect wallet. Please try again.');
@@ -421,8 +422,8 @@ function App() {
       // Create a simple transaction that stores the hash in a memo
       const transaction = new Transaction();
       
-      // Add memo instruction with the hash and URL
-      const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}`;
+      // Add memo instruction with the hash and URL (and main account tag)
+      const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
       const memoInstruction = {
         programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2'),
         keys: [],
@@ -662,13 +663,13 @@ function App() {
               ) : (
                 <Shield className="button-icon" />
               )}
-              {isConnecting ? 'Connecting...' : 'Connect Main Account'}
+              {isConnecting ? 'Connecting...' : 'Connect Phantom Wallet'}
             </button>
           ) : (
             <div className="wallet-connected">
               <div className="wallet-info">
                 <CheckCircle className="success-icon" />
-                <span>Main Account: {wallet.slice(0, 8)}...{wallet.slice(-8)}</span>
+                <span>Wallet Connected: {wallet.slice(0, 8)}...{wallet.slice(-8)}</span>
               </div>
             </div>
           )}
