@@ -67,8 +67,8 @@ async function fetchWithCORSProxy(url, options = {}) {
   });
 }
 
-// Extract article text from parent page or URL parameter
-async function getArticleText() {
+// Extract article text from parent page or URL parameter (DISABLED - no auto-fetching)
+/* async function getArticleText() {
   try {
     // Check for URL parameter first (for standalone usage)
     const urlParams = new URLSearchParams(window.location.search);
@@ -162,7 +162,7 @@ async function getArticleText() {
     console.error('Failed to extract article text:', error);
     throw error;
   }
-}
+} */
 
 function App() {
   const MAIN_ACCOUNT = 'BmT4QKawfG3zV3G36URMGdxWx734AJC2zp7XedZiApyV';
@@ -345,7 +345,7 @@ function App() {
     return { text: articleText, url: cleanUrlString };
   };
 
-  // Load article text on component mount
+  // Load article text on component mount (only if URL parameter is provided)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const loadArticleText = async () => {
@@ -353,7 +353,7 @@ function App() {
         setIsLoadingArticle(true);
         setArticleError('');
         
-        // Check for URL parameter first
+        // Only check for URL parameter - no automatic fetching
         const urlParams = new URLSearchParams(window.location.search);
         const targetUrl = urlParams.get('url');
         
@@ -365,17 +365,15 @@ function App() {
           setVerificationUrl(result.url);
           setStatusMessage(`Successfully loaded article from: ${result.url}`);
         } else {
-          const result = await getArticleText();
-          setArticleText(result.text);
-          setVerificationUrl(result.url);
-          setStatusMessage(`Successfully loaded article from: ${result.url}`);
+          // No automatic loading - just set placeholder
+          setArticleText('Paste the article content here or enter a URL below...');
+          setStatusMessage('Enter an article URL or paste content manually to get started.');
         }
       } catch (error) {
         console.error('Failed to load article:', error);
-        setArticleError('Couldn\'t retrieve article text automatically. Please paste the article content manually below.');
-        setStatusMessage('Article auto-load failed. Please paste the article text manually.');
-        // Set a helpful placeholder
-        setArticleText('Paste the article content here...');
+        setArticleError('Couldn\'t retrieve article text from that URL. Please try a different URL or paste the content manually.');
+        setStatusMessage('Failed to load article from URL. Please try again.');
+        setArticleText('Paste the article content here or enter a URL below...');
       } finally {
         setIsLoadingArticle(false);
       }
@@ -584,7 +582,7 @@ function App() {
               </div>
             ) : null}
 
-            {/* Manual URL Input */}
+            {/* URL Input */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ 
                 display: 'block', 
@@ -592,7 +590,7 @@ function App() {
                 fontWeight: '500', 
                 color: '#374151' 
               }}>
-                Or enter article URL manually:
+                Enter article URL to load content:
               </label>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
