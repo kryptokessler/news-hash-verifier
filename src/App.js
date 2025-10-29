@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
@@ -20,6 +21,9 @@ async function sha256(text) {
 async function fetchWithCORSProxy(url, options = {}) {
   // List of CORS proxy services (in order of preference)
   const corsProxies = [
+    // Jina Reader returns readable content without CORS; try both http/https prefixes
+    'https://r.jina.ai/http://',
+    'https://r.jina.ai/https://',
     'https://api.allorigins.win/raw?url=',
     'https://cors-anywhere.herokuapp.com/',
     'https://api.codetabs.com/v1/proxy?quest=',
@@ -30,7 +34,7 @@ async function fetchWithCORSProxy(url, options = {}) {
   for (const proxy of corsProxies) {
     try {
       console.log(`Trying CORS proxy: ${proxy}`);
-      const proxyUrl = proxy + encodeURIComponent(url);
+      const proxyUrl = proxy.includes('jina.ai') ? (proxy + url.replace(/^https?:\/\//, '')) : (proxy + encodeURIComponent(url));
       
       const response = await fetch(proxyUrl, {
         ...options,
@@ -111,6 +115,11 @@ async function getArticleText() {
     }
     
     const html = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    // If we received plain text (e.g., from Jina Reader), return directly
+    if (!contentType.includes('text/html') && html && html.length > 100) {
+      return { text: html, url: parentUrl };
+    }
     
     // Parse HTML using DOMParser
     const parser = new DOMParser();
@@ -298,6 +307,10 @@ function App() {
     }
     
     const html = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html') && html && html.length > 100) {
+      return { text: html, url: cleanUrlString };
+    }
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
@@ -413,14 +426,7 @@ function App() {
       // Generate SHA-256 hash
       const hash = await sha256(articleText);
       
-      // Create real Solana transaction
-      const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
-      
-      if (!Connection || !PublicKey || !Transaction || !SystemProgram) {
-        throw new Error('Solana Web3.js not properly loaded');
-      }
-
-      // Connect to Solana mainnet
+      // Create real Solana transaction using imported web3.js
       const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
       
       // Create a simple transaction that stores the hash in a memo
@@ -428,12 +434,12 @@ function App() {
       
       // Add memo instruction with the hash and URL (and main account tag)
       const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
-      const memoInstruction = {
+      const memoIx = new TransactionInstruction({
         programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2'),
         keys: [],
         data: new TextEncoder().encode(memoData)
-      };
-      transaction.add(memoInstruction);
+      });
+      transaction.add(memoIx);
       
       // Validate wallet public key and set fee payer
       try {
