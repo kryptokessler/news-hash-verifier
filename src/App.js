@@ -157,7 +157,8 @@ async function getArticleText() {
 
 function App() {
   const MAIN_ACCOUNT = 'BmT4QKawfG3zV3G36URMGdxWx734AJC2zp7XedZiApyV';
-  const [wallet, setWallet] = useState(null);
+  const [wallet, setWallet] = useState(null); // base58 string
+  const [walletPublicKeyObj, setWalletPublicKeyObj] = useState(null); // Phantom PublicKey instance
   const [isConnecting, setIsConnecting] = useState(false);
   const [isHashing, setIsHashing] = useState(false);
   const [articleText, setArticleText] = useState('');
@@ -380,7 +381,10 @@ function App() {
     try {
       setIsConnecting(true);
       const response = await window.solana.connect();
-      setWallet(response.publicKey.toString());
+      // Persist both string and PublicKey object
+      const pkString = response.publicKey.toBase58 ? response.publicKey.toBase58() : response.publicKey.toString();
+      setWallet(pkString);
+      setWalletPublicKeyObj(response.publicKey);
       setStatusMessage('Wallet connected successfully!');
     } catch (error) {
       console.error('Wallet connection failed:', error);
@@ -431,10 +435,19 @@ function App() {
       };
       transaction.add(memoInstruction);
       
-      // Set recent blockhash
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = new PublicKey(wallet);
+      // Validate wallet public key and set fee payer
+      try {
+        // Prefer Phantom's PublicKey object when available
+        const feePayerPk = walletPublicKeyObj || new PublicKey(wallet);
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = feePayerPk;
+      } catch (pkErr) {
+        console.error('Invalid wallet public key:', wallet, pkErr);
+        setStatusMessage('Invalid wallet public key. Please reconnect your wallet.');
+        setIsHashing(false);
+        return;
+      }
       
       // Request wallet to sign and send transaction
       const { signature } = await window.solana.signAndSendTransaction(transaction);
