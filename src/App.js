@@ -448,13 +448,22 @@ function App() {
       const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
       let memoIx;
       try {
-        // Correct Memo program id ends with '...B2qXg'
+        // Ensure valid base58 strings for keys
+        const walletPubKeyString = typeof wallet === 'string'
+          ? wallet
+          : (wallet?.toBase58?.() || wallet?.publicKey?.toBase58?.() || providerPublicKeyObj?.toBase58?.() || String(wallet));
+
+        console.log('Using walletPubKey for memo:', walletPubKeyString);
+        const fromPubkey = new PublicKey(walletPubKeyString);
+
         const MEMO_PROGRAM_ID_STRING = 'MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg';
         const memoProgramId = new PublicKey(MEMO_PROGRAM_ID_STRING);
+        const memoBytes = new TextEncoder().encode(memoData);
+
         memoIx = new TransactionInstruction({
+          keys: [{ pubkey: fromPubkey, isSigner: true, isWritable: false }],
           programId: memoProgramId,
-          keys: [],
-          data: new TextEncoder().encode(memoData)
+          data: memoBytes
         });
       } catch (e) {
         console.error('Failed to construct memo instruction:', e);
