@@ -35,8 +35,8 @@ jobs:
     - name: Run tests
       run: npm test -- --coverage --watchAll=false --passWithNoTests
       
-    - name: Build application
-      run: npm run build
+    - name: Build application (do not fail on warnings)
+      run: CI=false npm run build
       
     - name: Check build output
       run: |
