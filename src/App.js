@@ -3,6 +3,16 @@ import { Connection, PublicKey, Transaction, TransactionInstruction } from '@sol
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
+// Precompute and validate Memo program id once
+let MEMO_PROGRAM_ID = null;
+try {
+  MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2');
+  // console.debug('MEMO_PROGRAM_ID:', MEMO_PROGRAM_ID.toBase58());
+} catch (e) {
+  // Fallback: will surface clearly in UI if somehow invalid
+  console.error('Failed to construct MEMO_PROGRAM_ID:', e);
+}
+
 // Browser-safe text encoding using TextEncoder
 function encodeText(text) {
   const encoder = new TextEncoder();
@@ -449,11 +459,22 @@ function App() {
       
       // Add memo instruction with the hash and URL (and main account tag)
       const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
-      const memoIx = new TransactionInstruction({
-        programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2'),
-        keys: [],
-        data: new TextEncoder().encode(memoData)
-      });
+      let memoIx;
+      try {
+        if (!MEMO_PROGRAM_ID) {
+          throw new Error('MEMO_PROGRAM_ID not initialized');
+        }
+        memoIx = new TransactionInstruction({
+          programId: MEMO_PROGRAM_ID,
+          keys: [],
+          data: new TextEncoder().encode(memoData)
+        });
+      } catch (e) {
+        console.error('Failed to construct memo instruction:', e);
+        setStatusMessage(`Failed to hash article: ${e.message}`);
+        setIsHashing(false);
+        return;
+      }
       transaction.add(memoIx);
       
       // Use the Solana PublicKey object we created during connection
@@ -467,7 +488,14 @@ function App() {
       console.log('Using Solana PublicKey object:', walletPublicKeyObj.toBase58());
       const { blockhash } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
-      transaction.feePayer = walletPublicKeyObj;
+      try {
+        transaction.feePayer = walletPublicKeyObj;
+      } catch (e) {
+        console.error('Failed to set feePayer:', e, 'walletPublicKeyObj:', walletPublicKeyObj);
+        setStatusMessage(`Failed to hash article: ${e.message}`);
+        setIsHashing(false);
+        return;
+      }
       
       // Request wallet to sign and send transaction
       const { signature } = await window.solana.signAndSendTransaction(transaction);
