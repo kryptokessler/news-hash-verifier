@@ -3,16 +3,6 @@ import { Connection, PublicKey, Transaction, TransactionInstruction } from '@sol
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
-// Precompute and validate Memo program id once
-let MEMO_PROGRAM_ID = null;
-try {
-  MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2');
-  // console.debug('MEMO_PROGRAM_ID:', MEMO_PROGRAM_ID.toBase58());
-} catch (e) {
-  // Fallback: will surface clearly in UI if somehow invalid
-  console.error('Failed to construct MEMO_PROGRAM_ID:', e);
-}
-
 // Browser-safe text encoding using TextEncoder
 function encodeText(text) {
   const encoder = new TextEncoder();
@@ -461,11 +451,9 @@ function App() {
       const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
       let memoIx;
       try {
-        if (!MEMO_PROGRAM_ID) {
-          throw new Error('MEMO_PROGRAM_ID not initialized');
-        }
+        const memoProgramId = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2');
         memoIx = new TransactionInstruction({
-          programId: MEMO_PROGRAM_ID,
+          programId: memoProgramId,
           keys: [],
           data: new TextEncoder().encode(memoData)
         });
