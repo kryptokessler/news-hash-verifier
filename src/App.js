@@ -3,9 +3,6 @@ import { Connection, PublicKey, Transaction, TransactionInstruction } from '@sol
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
-// ✅ Add these two lines right here
-const urlParams = new URLSearchParams(window.location.search);
-const articleUrl = urlParams.get("url");
 // Browser-safe text encoding using TextEncoder
 function encodeText(text) {
   const encoder = new TextEncoder();
