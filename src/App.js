@@ -167,7 +167,7 @@ async function fetchWithCORSProxy(url, options = {}) {
 function App() {
   const MAIN_ACCOUNT = 'BmT4QKawfG3zV3G36URMGdxWx734AJC2zp7XedZiApyV';
   const [wallet, setWallet] = useState(null); // base58 string
-  const [walletPublicKeyObj, setWalletPublicKeyObj] = useState(null); // Phantom PublicKey instance
+  const [providerPublicKeyObj, setProviderPublicKeyObj] = useState(null); // Phantom-provided PublicKey instance
   const [isConnecting, setIsConnecting] = useState(false);
   const [isHashing, setIsHashing] = useState(false);
   const [articleText, setArticleText] = useState('');
@@ -392,21 +392,18 @@ function App() {
       setIsConnecting(true);
       const response = await window.solana.connect();
       console.log('Phantom connection response:', response);
-      console.log('PublicKey object:', response.publicKey);
+      console.log('PublicKey object (from provider):', response.publicKey);
       console.log('PublicKey type:', typeof response.publicKey);
       console.log('PublicKey methods:', Object.getOwnPropertyNames(response.publicKey));
       
-      // Convert Phantom's custom PublicKey to Solana PublicKey
+      // Use provider object directly (avoids cross-bundle class mismatch)
       const pkString = response.publicKey.toBase58 ? response.publicKey.toBase58() : response.publicKey.toString();
       console.log('PublicKey string:', pkString);
       console.log('PublicKey string length:', pkString.length);
       
-      // Create a proper Solana PublicKey from the string
-      const solanaPublicKey = new PublicKey(pkString);
-      console.log('Created Solana PublicKey:', solanaPublicKey.toBase58());
-      
+      // Store both the string and provider object
       setWallet(pkString);
-      setWalletPublicKeyObj(solanaPublicKey);
+      setProviderPublicKeyObj(response.publicKey);
       setStatusMessage('Wallet connected successfully!');
     } catch (error) {
       console.error('Wallet connection failed:', error);
@@ -432,11 +429,11 @@ function App() {
       setIsHashing(true);
       setStatusMessage('Hashing article to blockchain...');
       
-      console.log('Wallet state:', { wallet, walletPublicKeyObj });
+      console.log('Wallet state:', { wallet, providerPublicKeyObj });
       console.log('Wallet type:', typeof wallet);
-      console.log('WalletPublicKeyObj type:', typeof walletPublicKeyObj);
+      console.log('providerPublicKeyObj type:', typeof providerPublicKeyObj);
       console.log('Wallet value:', wallet);
-      console.log('WalletPublicKeyObj value:', walletPublicKeyObj);
+      console.log('providerPublicKeyObj value:', providerPublicKeyObj);
 
       // Generate SHA-256 hash
       const hash = await sha256(articleText);
@@ -465,19 +462,20 @@ function App() {
       }
       transaction.add(memoIx);
       
-      // Use the Solana PublicKey object we created during connection
-      if (!walletPublicKeyObj || !walletPublicKeyObj.toBase58) {
-        console.error('No valid Solana PublicKey object found');
+      // Use the provider's PublicKey object directly (prevents invalid key issues)
+      if (!providerPublicKeyObj || (!providerPublicKeyObj.toBase58 && !providerPublicKeyObj.toString)) {
+        console.error('No valid provider PublicKey object found');
         setStatusMessage('Wallet not properly connected. Please reconnect your wallet.');
         setIsHashing(false);
         return;
       }
       
-      console.log('Using Solana PublicKey object:', walletPublicKeyObj.toBase58());
+      const displayPk = providerPublicKeyObj.toBase58 ? providerPublicKeyObj.toBase58() : String(providerPublicKeyObj);
+      console.log('Using provider PublicKey object:', displayPk);
       const { blockhash } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       try {
-        transaction.feePayer = walletPublicKeyObj;
+        transaction.feePayer = providerPublicKeyObj;
       } catch (e) {
         console.error('Failed to set feePayer:', e, 'walletPublicKeyObj:', walletPublicKeyObj);
         setStatusMessage(`Failed to hash article: ${e.message}`);
