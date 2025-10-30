@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import React, { useState, useEffect } from 'react';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
+// ✅ Add these two lines right here
+const urlParams = new URLSearchParams(window.location.search);
+const articleUrl = urlParams.get("url");
 // Browser-safe text encoding using TextEncoder
 function encodeText(text) {
   const encoder = new TextEncoder();
@@ -456,30 +458,18 @@ function App() {
       });
       transaction.add(memoIx);
       
-      // Validate wallet public key and set fee payer
-      let feePayerPk;
-      try {
-        // Use the Solana PublicKey object we created during connection
-        if (walletPublicKeyObj && walletPublicKeyObj.toBase58) {
-          console.log('Using Solana PublicKey object');
-          feePayerPk = walletPublicKeyObj;
-        } else if (wallet && typeof wallet === 'string' && wallet.length > 0) {
-          console.log('Creating PublicKey from wallet string:', wallet);
-          feePayerPk = new PublicKey(wallet);
-        } else {
-          throw new Error('No valid wallet connected');
-        }
-        
-        console.log('Fee payer public key:', feePayerPk.toBase58());
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = feePayerPk;
-      } catch (pkErr) {
-        console.error('Invalid wallet public key:', { wallet, walletPublicKeyObj, error: pkErr });
-        setStatusMessage('Invalid wallet public key. Please reconnect your wallet.');
+      // Use the Solana PublicKey object we created during connection
+      if (!walletPublicKeyObj || !walletPublicKeyObj.toBase58) {
+        console.error('No valid Solana PublicKey object found');
+        setStatusMessage('Wallet not properly connected. Please reconnect your wallet.');
         setIsHashing(false);
         return;
       }
+      
+      console.log('Using Solana PublicKey object:', walletPublicKeyObj.toBase58());
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = walletPublicKeyObj;
       
       // Request wallet to sign and send transaction
       const { signature } = await window.solana.signAndSendTransaction(transaction);
