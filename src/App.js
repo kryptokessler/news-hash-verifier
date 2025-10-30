@@ -475,9 +475,17 @@ function App() {
       const { blockhash } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       try {
-        transaction.feePayer = providerPublicKeyObj;
+        // Normalize public key regardless of whether it's a string or provider object
+        const sourceKey = providerPublicKeyObj || wallet;
+        const base58Key = typeof sourceKey === 'string'
+          ? sourceKey
+          : (sourceKey && typeof sourceKey.toBase58 === 'function')
+            ? sourceKey.toBase58()
+            : String(sourceKey);
+        const feePayerPubkey = new PublicKey(base58Key);
+        transaction.feePayer = feePayerPubkey;
       } catch (e) {
-        console.error('Failed to set feePayer:', e, 'walletPublicKeyObj:', walletPublicKeyObj);
+        console.error('Failed to set feePayer:', e, 'providerPublicKeyObj:', providerPublicKeyObj, 'wallet:', wallet);
         setStatusMessage(`Failed to hash article: ${e.message}`);
         setIsHashing(false);
         return;
