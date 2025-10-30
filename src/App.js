@@ -232,16 +232,21 @@ function App() {
     }
   };
 
-  // Clean URL by removing common WordPress placeholders and malformed parts
+  // Clean/normalize URL while preserving semantic trailing slash for article pages
   const cleanUrl = (url) => {
     try {
       const urlObj = new URL(url);
       
       // Remove common WordPress placeholders and malformed path segments
-      const cleanPath = urlObj.pathname
+      let cleanPath = urlObj.pathname
         .replace(/_wp_link_placeholder/g, '')
-        .replace(/\/+/g, '/') // Remove multiple slashes
-        .replace(/\/$/, ''); // Remove trailing slash
+        .replace(/\/+/g, '/'); // Remove multiple slashes
+
+      // If path looks like a content slug (no file extension), ensure trailing slash
+      const looksLikeSlug = !/\.[a-zA-Z0-9]{1,6}$/.test(cleanPath);
+      if (looksLikeSlug && !cleanPath.endsWith('/')) {
+        cleanPath = cleanPath + '/';
+      }
       
       urlObj.pathname = cleanPath;
       return urlObj.toString();
