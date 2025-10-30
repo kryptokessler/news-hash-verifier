@@ -448,7 +448,9 @@ function App() {
       const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
       let memoIx;
       try {
-        const memoProgramId = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2q2');
+        // Correct Memo program id ends with '...B2qXg'
+        const MEMO_PROGRAM_ID_STRING = 'MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg';
+        const memoProgramId = new PublicKey(MEMO_PROGRAM_ID_STRING);
         memoIx = new TransactionInstruction({
           programId: memoProgramId,
           keys: [],
