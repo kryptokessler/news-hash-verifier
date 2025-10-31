@@ -180,6 +180,19 @@ function App() {
   const [statusMessage, setStatusMessage] = useState('');
   const [manualUrl, setManualUrl] = useState('');
 
+  // Validate and normalize a possible public key input into a base58 string
+  const base58Alphabet = /^[1-9A-HJ-NP-Za-km-z]+$/;
+  function normalizeWalletBase58(maybePk) {
+    const asString = typeof maybePk === 'string'
+      ? maybePk
+      : (maybePk?.toBase58?.() || maybePk?.publicKey?.toBase58?.() || maybePk?.toString?.() || '');
+    const trimmed = String(asString).trim();
+    if (!trimmed || !base58Alphabet.test(trimmed)) {
+      throw new Error('Wallet public key is not valid base58');
+    }
+    return trimmed;
+  }
+
   // Bond curve pricing configuration
   const basePrice = 0.001; // SOL
   const priceMultiplier = 1.1;
@@ -475,10 +488,16 @@ function App() {
       const transaction = new Transaction();
 
       // Resolve sender pubkey string consistently
-      const walletPubKeyString = typeof wallet === 'string'
-        ? wallet
-        : (wallet?.toBase58?.() || wallet?.publicKey?.toBase58?.() || providerPublicKeyObj?.toBase58?.() || String(wallet));
-      const fromPubkey = new PublicKey(String(walletPubKeyString).trim());
+      let walletPubKeyString;
+      try {
+        walletPubKeyString = normalizeWalletBase58(wallet || providerPublicKeyObj);
+      } catch (e) {
+        console.error('Invalid wallet base58:', e);
+        setStatusMessage('Wallet key invalid. Please disconnect and reconnect Phantom.');
+        setIsHashing(false);
+        return;
+      }
+      const fromPubkey = new PublicKey(walletPubKeyString);
 
       // 1) Transfer instruction (payment)
       transaction.add(
