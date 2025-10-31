@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
@@ -482,35 +482,10 @@ function App() {
 
       // 1) Transfer instruction (payment)
       transaction.add(
-        TransactionInstruction.from({
-          programId: PublicKey.default, // placeholder overwritten below
-          keys: [],
-          data: new Uint8Array([])
-        })
-      );
-      // Replace with SystemProgram.transfer (avoiding extra import churn)
-      // We keep the import surface minimal; construct via raw instruction:
-      transaction.instructions.pop();
-      transaction.add(
-        // SystemProgram.transfer replacement using compiled data layout
-        // Simpler: use a helper TransactionInstruction for SystemProgram (encoded)
-        new TransactionInstruction({
-          programId: new PublicKey('11111111111111111111111111111111'), // SystemProgram.programId
-          keys: [
-            { pubkey: fromPubkey, isSigner: true, isWritable: true },
-            { pubkey: treasuryPubkey, isSigner: false, isWritable: true }
-          ],
-          // Transfer layout: instruction index 2 (transfer), then u64 lamports LE
-          data: (() => {
-            const buffer = new Uint8Array(1 + 8);
-            buffer[0] = 2; // SystemInstruction::Transfer
-            let v = BigInt(lamports);
-            for (let i = 0; i < 8; i++) {
-              buffer[1 + i] = Number(v & 0xffn);
-              v >>= 8n;
-            }
-            return buffer;
-          })()
+        SystemProgram.transfer({
+          fromPubkey: fromPubkey,
+          toPubkey: treasuryPubkey,
+          lamports: lamports
         })
       );
 
