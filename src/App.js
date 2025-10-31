@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
+import bs58 from 'bs58';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
@@ -497,7 +498,18 @@ function App() {
         setIsHashing(false);
         return;
       }
-      const fromPubkey = new PublicKey(walletPubKeyString);
+      // Build PublicKey from raw bytes to avoid cross-bundle constructor quirks
+      let fromPubkey;
+      try {
+        const decoded = bs58.decode(walletPubKeyString);
+        if (decoded.length !== 32) throw new Error('decoded length != 32');
+        fromPubkey = new PublicKey(decoded);
+      } catch (e) {
+        console.error('Failed to construct PublicKey from base58 bytes:', e);
+        setStatusMessage('Failed to prepare wallet key. Please reconnect Phantom.');
+        setIsHashing(false);
+        return;
+      }
 
       // 1) Transfer instruction (payment)
       transaction.add(
