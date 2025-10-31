@@ -7,6 +7,7 @@
   "dependencies": {
     "@solana/web3.js": "^1.78.0",
     "ajv": "^6.12.6",
+    "bs58": "^5.0.0",
     "ajv-keywords": "^3.5.2",
     "buffer": "^6.0.3",
     "clsx": "^2.0.0",
