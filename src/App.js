@@ -167,7 +167,7 @@ async function fetchWithCORSProxy(url, options = {}) {
 function App() {
   // Treasury (main account to receive payments)
   const TREASURY_BASE58 = '5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z';
-  const MAIN_ACCOUNT = TREASURY_BASE58;
+  const RPC_URL = 'https://solana-api.projectserum.com';
   const [wallet, setWallet] = useState(null); // base58 string
   const [providerPublicKeyObj, setProviderPublicKeyObj] = useState(null); // Phantom-provided PublicKey instance
   const [isConnecting, setIsConnecting] = useState(false);
@@ -193,7 +193,7 @@ function App() {
   // Fetch current count from chain (best-effort)
   const refreshHashCount = useCallback(async () => {
     try {
-      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      const connection = new Connection(RPC_URL, 'confirmed');
       const treasury = new PublicKey(TREASURY_BASE58);
       const sigs = await connection.getSignaturesForAddress(treasury, { limit: 1000 });
       // Heuristic: count all historical txs touching treasury as hashes
@@ -463,7 +463,7 @@ function App() {
       const hash = await sha256(articleText);
       
       // Create real Solana transaction using imported web3.js
-      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      const connection = new Connection(RPC_URL, 'confirmed');
       const treasuryPubkey = new PublicKey(TREASURY_BASE58);
 
       // Determine current price in lamports (0.001 SOL * 1.1^hashCount)
@@ -478,7 +478,7 @@ function App() {
       const walletPubKeyString = typeof wallet === 'string'
         ? wallet
         : (wallet?.toBase58?.() || wallet?.publicKey?.toBase58?.() || providerPublicKeyObj?.toBase58?.() || String(wallet));
-      const fromPubkey = new PublicKey(walletPubKeyString);
+      const fromPubkey = new PublicKey(String(walletPubKeyString).trim());
 
       // 1) Transfer instruction (payment)
       transaction.add(
@@ -515,7 +515,7 @@ function App() {
 
       const { blockhash } = await connection.getLatestBlockhash('finalized');
       transaction.recentBlockhash = blockhash;
-      transaction.feePayer = providerPublicKeyObj;
+      transaction.feePayer = fromPubkey;
 
       // Request wallet to sign and send transaction
       const { signature } = await window.solana.signAndSendTransaction(transaction);
