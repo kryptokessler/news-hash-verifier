@@ -165,7 +165,9 @@ async function fetchWithCORSProxy(url, options = {}) {
 } */
 
 function App() {
-  const MAIN_ACCOUNT = 'BmT4QKawfG3zV3G36URMGdxWx734AJC2zp7XedZiApyV';
+  // Treasury (main account to receive payments)
+  const TREASURY_BASE58 = '5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z';
+  const MAIN_ACCOUNT = TREASURY_BASE58;
   const [wallet, setWallet] = useState(null); // base58 string
   const [providerPublicKeyObj, setProviderPublicKeyObj] = useState(null); // Phantom-provided PublicKey instance
   const [isConnecting, setIsConnecting] = useState(false);
@@ -182,10 +184,25 @@ function App() {
   const basePrice = 0.001; // SOL
   const priceMultiplier = 1.1;
 
+  // On-chain count of prior hashes/payments to treasury
+  const [hashCount, setHashCount] = useState(0);
+
   // Calculate bond curve price
-  const calculateBondPrice = (hashCount) => {
-    return basePrice * Math.pow(priceMultiplier, hashCount);
-  };
+  const calculateBondPrice = (count) => basePrice * Math.pow(priceMultiplier, count);
+
+  // Fetch current count from chain (best-effort)
+  const refreshHashCount = useCallback(async () => {
+    try {
+      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      const treasury = new PublicKey(TREASURY_BASE58);
+      const sigs = await connection.getSignaturesForAddress(treasury, { limit: 1000 });
+      // Heuristic: count all historical txs touching treasury as hashes
+      setHashCount(Array.isArray(sigs) ? sigs.length : 0);
+    } catch (e) {
+      console.warn('Failed to fetch hash count; defaulting to 0:', e?.message || e);
+      setHashCount(0);
+    }
+  }, [TREASURY_BASE58]);
 
   // Load article from manual URL
   const loadFromUrl = async () => {
@@ -384,7 +401,9 @@ function App() {
     };
 
     loadArticleText();
-  }, [getArticleTextFromUrl]);
+    // Also refresh price data on mount
+    refreshHashCount();
+  }, [getArticleTextFromUrl, refreshHashCount]);
 
   // Connect to Phantom wallet (fee payer = connected wallet)
   const connectWallet = async () => {
@@ -418,7 +437,7 @@ function App() {
     }
   };
 
-  // Hash article to blockchain
+  // Hash article to blockchain (transfer + memo on mainnet)
   const hashArticle = async () => {
     if (!wallet) {
       setStatusMessage('Please connect your wallet first.');
@@ -445,68 +464,84 @@ function App() {
       
       // Create real Solana transaction using imported web3.js
       const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-      
-      // Create a simple transaction that stores the hash in a memo
+      const treasuryPubkey = new PublicKey(TREASURY_BASE58);
+
+      // Determine current price in lamports (0.001 SOL * 1.1^hashCount)
+      const currentCount = hashCount || 0;
+      const priceSol = calculateBondPrice(currentCount);
+      const lamports = Math.floor(priceSol * 1e9);
+
+      // Build transaction: transfer to treasury + memo with hash payload
       const transaction = new Transaction();
-      
-      // Add memo instruction with the hash and URL (and main account tag)
-      const memoData = `News Hash: ${hash}\nURL: ${verificationUrl}\nTimestamp: ${Date.now()}\nVerifier: ${MAIN_ACCOUNT}`;
-      let memoIx;
-      try {
-        // Ensure valid base58 strings for keys
-        const walletPubKeyString = typeof wallet === 'string'
-          ? wallet
-          : (wallet?.toBase58?.() || wallet?.publicKey?.toBase58?.() || providerPublicKeyObj?.toBase58?.() || String(wallet));
 
-        console.log('Using walletPubKey for memo:', walletPubKeyString);
-        const fromPubkey = new PublicKey(walletPubKeyString);
+      // Resolve sender pubkey string consistently
+      const walletPubKeyString = typeof wallet === 'string'
+        ? wallet
+        : (wallet?.toBase58?.() || wallet?.publicKey?.toBase58?.() || providerPublicKeyObj?.toBase58?.() || String(wallet));
+      const fromPubkey = new PublicKey(walletPubKeyString);
 
-        const MEMO_PROGRAM_ID_STRING = 'MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg';
-        const memoProgramId = new PublicKey(MEMO_PROGRAM_ID_STRING);
-        const memoBytes = new TextEncoder().encode(memoData);
+      // 1) Transfer instruction (payment)
+      transaction.add(
+        TransactionInstruction.from({
+          programId: PublicKey.default, // placeholder overwritten below
+          keys: [],
+          data: new Uint8Array([])
+        })
+      );
+      // Replace with SystemProgram.transfer (avoiding extra import churn)
+      // We keep the import surface minimal; construct via raw instruction:
+      transaction.instructions.pop();
+      transaction.add(
+        // SystemProgram.transfer replacement using compiled data layout
+        // Simpler: use a helper TransactionInstruction for SystemProgram (encoded)
+        new TransactionInstruction({
+          programId: new PublicKey('11111111111111111111111111111111'), // SystemProgram.programId
+          keys: [
+            { pubkey: fromPubkey, isSigner: true, isWritable: true },
+            { pubkey: treasuryPubkey, isSigner: false, isWritable: true }
+          ],
+          // Transfer layout: instruction index 2 (transfer), then u64 lamports LE
+          data: (() => {
+            const buffer = new Uint8Array(1 + 8);
+            buffer[0] = 2; // SystemInstruction::Transfer
+            let v = BigInt(lamports);
+            for (let i = 0; i < 8; i++) {
+              buffer[1 + i] = Number(v & 0xffn);
+              v >>= 8n;
+            }
+            return buffer;
+          })()
+        })
+      );
 
-        memoIx = new TransactionInstruction({
+      // 2) Memo instruction (hash + URL + price)
+      const memoProgramId = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg');
+      const memoPayload = JSON.stringify({
+        v: 1,
+        sha256: hash,
+        url: verificationUrl || manualUrl || window.location.href,
+        priceSol,
+        ts: new Date().toISOString()
+      });
+      const memoBytes = new TextEncoder().encode(memoPayload);
+      transaction.add(
+        new TransactionInstruction({
           keys: [{ pubkey: fromPubkey, isSigner: true, isWritable: false }],
           programId: memoProgramId,
           data: memoBytes
-        });
-      } catch (e) {
-        console.error('Failed to construct memo instruction:', e);
-        setStatusMessage(`Failed to hash article: ${e.message}`);
-        setIsHashing(false);
-        return;
-      }
-      transaction.add(memoIx);
-      
-      // Use the provider's PublicKey object directly (prevents invalid key issues)
+        })
+      );
+
       if (!providerPublicKeyObj || (!providerPublicKeyObj.toBase58 && !providerPublicKeyObj.toString)) {
-        console.error('No valid provider PublicKey object found');
         setStatusMessage('Wallet not properly connected. Please reconnect your wallet.');
         setIsHashing(false);
         return;
       }
-      
-      const displayPk = providerPublicKeyObj.toBase58 ? providerPublicKeyObj.toBase58() : String(providerPublicKeyObj);
-      console.log('Using provider PublicKey object:', displayPk);
-      const { blockhash } = await connection.getLatestBlockhash();
+
+      const { blockhash } = await connection.getLatestBlockhash('finalized');
       transaction.recentBlockhash = blockhash;
-      try {
-        // Normalize public key regardless of whether it's a string or provider object
-        const sourceKey = providerPublicKeyObj || wallet;
-        const base58Key = typeof sourceKey === 'string'
-          ? sourceKey
-          : (sourceKey && typeof sourceKey.toBase58 === 'function')
-            ? sourceKey.toBase58()
-            : String(sourceKey);
-        const feePayerPubkey = new PublicKey(base58Key);
-        transaction.feePayer = feePayerPubkey;
-      } catch (e) {
-        console.error('Failed to set feePayer:', e, 'providerPublicKeyObj:', providerPublicKeyObj, 'wallet:', wallet);
-        setStatusMessage(`Failed to hash article: ${e.message}`);
-        setIsHashing(false);
-        return;
-      }
-      
+      transaction.feePayer = providerPublicKeyObj;
+
       // Request wallet to sign and send transaction
       const { signature } = await window.solana.signAndSendTransaction(transaction);
       
@@ -521,6 +556,8 @@ function App() {
       });
 
       setStatusMessage('Article successfully hashed to blockchain!');
+      // Refresh price based on new on-chain state (best-effort)
+      try { await refreshHashCount(); } catch (_) {}
     } catch (error) {
       console.error('Hashing failed:', error);
       
