@@ -15,13 +15,14 @@ const alchemyApiKey = process.env.REACT_APP_ALCHEMY_API_KEY || 'dcEQkupbRm09NKET
 const endpoint = `https://solana-mainnet.g.alchemy.com/v2/${alchemyApiKey}`;
 
 // Let WalletProvider auto-detect standard wallets (including Phantom)
-// This avoids the "Phantom was registered as a Standard Wallet" warning
+// Pass empty array to avoid filter error - WalletProvider will auto-detect
+const wallets = [];
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider autoConnect>
+      <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
           <App />
         </WalletModalProvider>
