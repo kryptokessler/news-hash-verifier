@@ -15,6 +15,31 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <title>News Hash Verifier</title>
+    <!-- Preload script: Block ethereum injection at earliest possible moment -->
+    <script>
+      // Freeze window.ethereum property to prevent browser extensions from injecting it
+      // This runs before any React code loads, preventing evmAsk.js errors
+      (function() {
+        try {
+          if (window.ethereum) {
+            Object.defineProperty(window, 'ethereum', {
+              value: window.ethereum,
+              writable: false,
+              configurable: false
+            });
+          } else {
+            // Prevent future injection attempts
+            Object.defineProperty(window, 'ethereum', {
+              value: undefined,
+              writable: false,
+              configurable: false
+            });
+          }
+        } catch (e) {
+          // Ignore errors - property may already be defined
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

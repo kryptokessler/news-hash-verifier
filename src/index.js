@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import './index.css';
 import App from './App';
 
@@ -11,19 +10,18 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 
 // Configure RPC endpoint (mainnet) - using Alchemy RPC endpoint
 // Alchemy provides reliable, high-performance RPC access
-const endpoint = 'https://solana-mainnet.g.alchemy.com/v2/dcEQkupbRm09NKETBbc9f';
+// Get API key from environment variable (fallback to default if not set)
+const alchemyApiKey = process.env.REACT_APP_ALCHEMY_API_KEY || 'dcEQkupbRm09NKETBbc9f';
+const endpoint = `https://solana-mainnet.g.alchemy.com/v2/${alchemyApiKey}`;
 
-// Configure wallets - explicitly include Phantom
-// Note: Phantom may be detected as a standard wallet, but explicit inclusion ensures compatibility
-const wallets = [
-  new PhantomWalletAdapter()
-];
+// Let WalletProvider auto-detect standard wallets (including Phantom)
+// This avoids the "Phantom was registered as a Standard Wallet" warning
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider autoConnect>
         <WalletModalProvider>
           <App />
         </WalletModalProvider>

@@ -2,16 +2,31 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-// Mock Solana Web3
-global.window.solanaWeb3 = {
-  Connection: jest.fn(),
-  PublicKey: jest.fn(),
-  Transaction: jest.fn(),
-  SystemProgram: {
-    transfer: jest.fn()
-  },
-  clusterApiUrl: jest.fn(() => 'https://api.devnet.solana.com')
-};
+// Mock wallet adapter hooks
+jest.mock('@solana/wallet-adapter-react', () => ({
+  useWallet: () => ({
+    publicKey: null,
+    connected: false,
+    disconnect: jest.fn(),
+    sendTransaction: jest.fn()
+  }),
+  useConnection: () => ({
+    connection: {
+      getLatestBlockhash: jest.fn(() => Promise.resolve({ blockhash: 'test' })),
+      getSignaturesForAddress: jest.fn(() => Promise.resolve([])),
+      confirmTransaction: jest.fn(() => Promise.resolve({ value: { err: null } }))
+    }
+  }),
+  ConnectionProvider: ({ children }) => <>{children}</>,
+  WalletProvider: ({ children }) => <>{children}</>
+}));
+
+jest.mock('@solana/wallet-adapter-react-ui', () => ({
+  useWalletModal: () => ({
+    setVisible: jest.fn()
+  }),
+  WalletModalProvider: ({ children }) => <>{children}</>
+}));
 
 // Mock crypto.subtle
 global.crypto = {
