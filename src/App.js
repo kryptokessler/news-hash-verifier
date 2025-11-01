@@ -479,6 +479,8 @@ function App() {
       );
 
       // 2) Memo instruction (hash + URL + price) using @solana/spl-memo helper
+      // Note: createMemoInstruction signs with the fee payer automatically
+      // Don't pass signer array - the memo program handles it via the transaction's fee payer
       const memoPayload = JSON.stringify({
         v: 1,
         sha256: hash,
@@ -486,9 +488,28 @@ function App() {
         priceSol,
         ts: new Date().toISOString()
       });
-      transaction.add(
-        createMemoInstruction(memoPayload, [fromPubkey])
-      );
+      
+      // Limit memo size to avoid instruction data size errors (max ~1232 bytes)
+      // Memo program error code 1 often means data too large
+      const maxMemoSize = 1200; // Leave some buffer
+      const memoBytes = new TextEncoder().encode(memoPayload);
+      if (memoBytes.length > maxMemoSize) {
+        // Truncate URL if needed
+        const truncatedPayload = {
+          v: 1,
+          sha256: hash,
+          url: (verificationUrl || manualUrl || window.location.href).substring(0, 200),
+          priceSol,
+          ts: new Date().toISOString()
+        };
+        transaction.add(
+          createMemoInstruction(JSON.stringify(truncatedPayload))
+        );
+      } else {
+        transaction.add(
+          createMemoInstruction(memoPayload)
+        );
+      }
 
       // Get recent blockhash and set fee payer
       const { blockhash } = await connection.getLatestBlockhash('finalized');
