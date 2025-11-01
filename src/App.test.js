@@ -2,13 +2,6 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-// Polyfill TextEncoder/TextDecoder for Node.js test environment
-if (typeof global.TextEncoder === 'undefined') {
-  const { TextEncoder, TextDecoder } = require('util');
-  global.TextEncoder = TextEncoder;
-  global.TextDecoder = TextDecoder;
-}
-
 // Mock wallet adapter hooks
 jest.mock('@solana/wallet-adapter-react', () => ({
   useWallet: () => ({

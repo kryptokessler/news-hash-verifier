@@ -499,14 +499,19 @@ function App() {
       // sendTransaction automatically signs the transaction with the connected wallet
       const signature = await sendTransaction(transaction, connection);
       
-      // Wait for confirmation with longer timeout and better error handling
-      // Mainnet can be slow during peak times, so we use a longer timeout
+      // Wait for confirmation with better error handling
+      // Mainnet can be slow during peak times - transaction may succeed even if timeout occurs
       try {
         await connection.confirmTransaction(signature, 'confirmed');
       } catch (confirmError) {
-        // If confirmation times out, the transaction may still succeed
-        // Check if it's just a timeout vs an actual failure
-        if (confirmError.message && confirmError.message.includes('not confirmed')) {
+        // Handle transaction timeout - transaction was sent but confirmation timed out
+        // The transaction may still succeed, so we show the result with a pending indicator
+        const errorName = confirmError?.name || '';
+        const errorMessage = confirmError?.message || '';
+        
+        if (errorName === 'TransactionExpiredTimeoutError' || 
+            errorMessage.includes('not confirmed') || 
+            errorMessage.includes('Transaction was not confirmed')) {
           // Transaction was sent but not confirmed - it may still be pending
           // Set the result anyway so user can check the explorer
           setHashResult({
@@ -516,9 +521,10 @@ function App() {
             explorerUrl: `https://explorer.solana.com/tx/${signature}`,
             pending: true
           });
-          setStatusMessage('Transaction submitted! Confirmation is taking longer than expected. Please check the explorer link to verify.');
+          setStatusMessage('Transaction submitted! Confirmation is taking longer than expected. Please check the explorer link to verify status.');
           // Refresh price based on new on-chain state (best-effort)
           try { await refreshHashCount(); } catch (_) {}
+          setIsHashing(false);
           return; // Exit early since we handled the pending case
         }
         throw confirmError; // Re-throw if it's a different error
