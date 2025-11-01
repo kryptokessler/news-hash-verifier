@@ -9,10 +9,9 @@ import App from './App';
 // Import wallet adapter CSS
 import '@solana/wallet-adapter-react-ui/styles.css';
 
-// Configure RPC endpoint (mainnet) - using official Solana mainnet endpoint
-// Note: The -beta suffix is required for the official mainnet endpoint
-// Alternative: Use a free RPC provider like Helius if rate limits become an issue
-const endpoint = 'https://api.mainnet-beta.solana.com';
+// Configure RPC endpoint (mainnet) - using Alchemy RPC endpoint
+// Alchemy provides reliable, high-performance RPC access
+const endpoint = 'https://solana-mainnet.g.alchemy.com/v2/dcEQkupbRm09NKETBbc9f';
 
 // Configure wallets - explicitly include Phantom
 // Note: Phantom may be detected as a standard wallet, but explicit inclusion ensures compatibility
