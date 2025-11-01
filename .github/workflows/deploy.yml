@@ -45,6 +45,8 @@ jobs:
 
       - name: 🏗️ Build project (do not fail on warnings)
         run: CI=false npm run build --legacy-peer-deps
+        env:
+          REACT_APP_ALCHEMY_API_KEY: ${{ secrets.REACT_APP_ALCHEMY_API_KEY }}
 
       - name: 📄 Add SPA fallback (404.html)
         run: cp build/index.html build/404.html
