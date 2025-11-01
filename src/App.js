@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
+import { PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
+import { createMemoInstruction } from '@solana/spl-memo';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
@@ -452,17 +453,6 @@ function App() {
         return;
       }
 
-      // Construct memo program ID with try-catch
-      let memoProgramId;
-      try {
-        memoProgramId = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg');
-      } catch (e) {
-        console.error('Invalid memo program ID:', e);
-        setStatusMessage('Invalid memo program configuration.');
-        setIsHashing(false);
-        return;
-      }
-
       // Determine current price in lamports (0.001 SOL * 1.1^hashCount)
       const currentCount = hashCount || 0;
       const priceSol = calculateBondPrice(currentCount);
@@ -484,7 +474,7 @@ function App() {
         })
       );
 
-      // 2) Memo instruction (hash + URL + price)
+      // 2) Memo instruction (hash + URL + price) using @solana/spl-memo helper
       const memoPayload = JSON.stringify({
         v: 1,
         sha256: hash,
@@ -492,13 +482,8 @@ function App() {
         priceSol,
         ts: new Date().toISOString()
       });
-      const memoBytes = new TextEncoder().encode(memoPayload);
       transaction.add(
-        new TransactionInstruction({
-          keys: [{ pubkey: fromPubkey, isSigner: true, isWritable: false }],
-          programId: memoProgramId,
-          data: memoBytes
-        })
+        createMemoInstruction(memoPayload, [fromPubkey])
       );
 
       // Get recent blockhash and set fee payer
@@ -734,7 +719,7 @@ function App() {
               Connect Phantom Wallet
             </button>
           ) : (
-            <div className="wallet-connected">
+            <div className="wallet-connected" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <div className="wallet-info">
                 <CheckCircle className="success-icon" />
                 <span>Wallet Connected: {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}</span>
@@ -742,7 +727,6 @@ function App() {
               <button
                 onClick={disconnect}
                 style={{
-                  marginLeft: '12px',
                   padding: '6px 12px',
                   fontSize: '0.875rem',
                   backgroundColor: '#ef4444',
