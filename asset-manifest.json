@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/news-hash-verifier/static/css/main.dc01272d.css",
+    "main.js": "/news-hash-verifier/static/js/main.7bbd3a14.js",
+    "index.html": "/news-hash-verifier/index.html",
+    "main.dc01272d.css.map": "/news-hash-verifier/static/css/main.dc01272d.css.map",
+    "main.7bbd3a14.js.map": "/news-hash-verifier/static/js/main.7bbd3a14.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.dc01272d.css",
+    "static/js/main.7bbd3a14.js"
+  ]
+}

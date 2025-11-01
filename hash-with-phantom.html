@@ -1,0 +1,133 @@
+<!-- Standalone helper demo: Hash article and pay using Phantom -->
+<!-- This file is not part of the React build; it's a standalone HTML helper. -->
+<!-- Open directly in a browser if you want to test the flow outside React. -->
+
+<!-- include libraries (unpkg) -->
+<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+<script src="https://unpkg.com/@solana/spl-memo@2.0.0/lib/index.iife.min.js"></script>
+
+<script>
+(async () => {
+  const { Connection, PublicKey, SystemProgram, Transaction } = solanaWeb3;
+  const { createMemoInstruction } = splMemo;
+
+  // CONFIG
+  const RPC_URL = 'https://api.mainnet-beta.solana.com'; // mainnet
+  const connection = new Connection(RPC_URL, 'confirmed');
+
+  const TREASURY = new PublicKey('YOUR_TREASURY_PUBKEY_HERE'); // change this
+  const BASE_SOL = 0.001; // initial price
+  const INCREASE = 0.10; // 10% each step
+
+  // helpers
+  async function sha256Hex(str) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Count previous hash-paying transactions to treasury
+  async function countHashesToTreasury() {
+    const sigs = await connection.getSignaturesForAddress(TREASURY, {limit: 1000});
+    let count = 0;
+    for (const s of sigs) {
+      const tx = await connection.getTransaction(s.signature, {commitment: 'confirmed'});
+      if (!tx) continue;
+      const inner = tx.transaction.message.instructions;
+      for (const ix of inner) {
+        try {
+          if (ix.programId.equals(SystemProgram.programId)) {
+            if (tx.meta && tx.meta.postBalances) {
+              if (tx.transaction.message.accountKeys.some(k => k.toBase58() === TREASURY.toBase58())) {
+                count++;
+                break;
+              }
+            }
+          }
+          if (ix.programId && ix.programId.toBase58 && ix.programId.toBase58() === splMemo.MEMO_PROGRAM_ID.toBase58()) {
+            // optionally check memo contents
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+      }
+    }
+    return count;
+  }
+
+  function solToLamports(sol) { return Math.floor(sol * 1e9); }
+  function lamportsToSol(l) { return l / 1e9; }
+
+  function computePrice(base, increase, count) {
+    return base * Math.pow(1 + increase, count);
+  }
+
+  // Main function the page calls
+  window.hashArticleAndPay = async function(articleTextOrUrl) {
+    try {
+      if (!window.solana || !window.solana.isPhantom) {
+        alert('Phantom wallet not found. Install Phantom and reload.');
+        return;
+      }
+
+      const articleText = articleTextOrUrl; // you can fetch the url text before calling this
+      const sha = await sha256Hex(articleText);
+
+      // compute current count -> price
+      const n = await countHashesToTreasury();
+      const nextPriceSol = computePrice(BASE_SOL, INCREASE, n);
+      const lamports = solToLamports(nextPriceSol);
+
+      // Build payload for memo
+      const payload = { v: 1, sha256: sha, url: window.location.href, by: 'AIAN', ts: new Date().toISOString() };
+
+      // Prepare transaction: transfer + memo
+      const provider = window.solana;
+      await provider.connect(); // prompt user
+      const from = new PublicKey(provider.publicKey.toString());
+
+      const tx = new Transaction();
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: from,
+          toPubkey: TREASURY,
+          lamports: lamports,
+        })
+      );
+      tx.add(createMemoInstruction(JSON.stringify(payload)));
+
+      tx.feePayer = from;
+      const { blockhash } = await connection.getLatestBlockhash('finalized');
+      tx.recentBlockhash = blockhash;
+
+      // Phantom signs and sends
+      const signed = await provider.signTransaction(tx);
+      const raw = signed.serialize();
+      const txid = await connection.sendRawTransaction(raw, {skipPreflight: false});
+      await connection.confirmTransaction(txid, 'confirmed');
+
+      console.log('✅ Sent tx', txid, payload, 'price (SOL):', nextPriceSol);
+      alert('Published: ' + txid);
+      return { txid, price: nextPriceSol, sha };
+    } catch (err) {
+      console.error(err);
+      alert('Error: ' + (err.message || err));
+      throw err;
+    }
+  };
+
+  // optional small helper to load article text from URL (simple fetch)
+  window.fetchArticleText = async function(url) {
+    const res = await fetch(url);
+    const html = await res.text();
+    const stripped = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<\/?[^>]+(>|$)/g, ' ');
+    return stripped.substring(0, 20000); // limit
+  };
+
+  console.log('Hash-with-Phantom module ready');
+})();
+</script>
+
+
