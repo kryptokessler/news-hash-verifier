@@ -9,10 +9,11 @@ import App from './App';
 // Import wallet adapter CSS
 import '@solana/wallet-adapter-react-ui/styles.css';
 
-// Configure RPC endpoint (mainnet) - using reliable public RPC
-// Official endpoint: https://api.mainnet-beta.solana.com
-// Alternative: https://rpc.ankr.com/solana (good free tier)
-const endpoint = 'https://api.mainnet-beta.solana.com';
+// Configure RPC endpoint (mainnet) - using Ankr public RPC (better free tier, no 403 errors)
+// Alternative endpoints if needed:
+// - https://api.mainnet-beta.solana.com (official, but may have rate limits)
+// - https://solana-api.projectserum.com (may timeout)
+const endpoint = 'https://rpc.ankr.com/solana';
 
 // Configure wallets - explicitly include Phantom
 // Note: Phantom may be detected as a standard wallet, but explicit inclusion ensures compatibility
