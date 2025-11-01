@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
-import bs58 from 'bs58';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { Shield, Hash, ExternalLink, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import './App.css';
 
@@ -168,10 +169,12 @@ async function fetchWithCORSProxy(url, options = {}) {
 function App() {
   // Treasury (main account to receive payments)
   const TREASURY_BASE58 = '5TWWTqFfnketLRyYAYWJZmdJGRMd8iuTPBY5U7gEAC4Z';
-  const RPC_URL = 'https://solana-api.projectserum.com';
-  const [wallet, setWallet] = useState(null); // base58 string
-  const [providerPublicKeyObj, setProviderPublicKeyObj] = useState(null); // Phantom-provided PublicKey instance
-  const [isConnecting, setIsConnecting] = useState(false);
+  
+  // Wallet adapter hooks - publicKey is already validated, don't reconstruct
+  const { publicKey, connected, disconnect, sendTransaction } = useWallet();
+  const { connection } = useConnection();
+  const { setVisible } = useWalletModal();
+  
   const [isHashing, setIsHashing] = useState(false);
   const [articleText, setArticleText] = useState('');
   const [verificationUrl, setVerificationUrl] = useState('');
@@ -180,19 +183,6 @@ function App() {
   const [hashResult, setHashResult] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [manualUrl, setManualUrl] = useState('');
-
-  // Validate and normalize a possible public key input into a base58 string
-  const base58Alphabet = /^[1-9A-HJ-NP-Za-km-z]+$/;
-  function normalizeWalletBase58(maybePk) {
-    const asString = typeof maybePk === 'string'
-      ? maybePk
-      : (maybePk?.toBase58?.() || maybePk?.publicKey?.toBase58?.() || maybePk?.toString?.() || '');
-    const trimmed = String(asString).trim();
-    if (!trimmed || !base58Alphabet.test(trimmed)) {
-      throw new Error('Wallet public key is not valid base58');
-    }
-    return trimmed;
-  }
 
   // Bond curve pricing configuration
   const basePrice = 0.001; // SOL
@@ -207,8 +197,14 @@ function App() {
   // Fetch current count from chain (best-effort)
   const refreshHashCount = useCallback(async () => {
     try {
-      const connection = new Connection(RPC_URL, 'confirmed');
-      const treasury = new PublicKey(TREASURY_BASE58);
+      let treasury;
+      try {
+        treasury = new PublicKey(TREASURY_BASE58);
+      } catch (e) {
+        console.error('Invalid treasury public key:', e);
+        setHashCount(0);
+        return;
+      }
       const sigs = await connection.getSignaturesForAddress(treasury, { limit: 1000 });
       // Heuristic: count all historical txs touching treasury as hashes
       setHashCount(Array.isArray(sigs) ? sigs.length : 0);
@@ -216,7 +212,7 @@ function App() {
       console.warn('Failed to fetch hash count; defaulting to 0:', e?.message || e);
       setHashCount(0);
     }
-  }, [TREASURY_BASE58]);
+  }, [connection]);
 
   // Load article from manual URL
   const loadFromUrl = async () => {
@@ -419,42 +415,17 @@ function App() {
     refreshHashCount();
   }, [getArticleTextFromUrl, refreshHashCount]);
 
-  // Connect to Phantom wallet (fee payer = connected wallet)
-  const connectWallet = async () => {
-    if (!window.solana || !window.solana.isPhantom) {
-      setStatusMessage('Phantom wallet not found. Please install Phantom wallet.');
-      return;
-    }
-
-    try {
-      setIsConnecting(true);
-      const response = await window.solana.connect();
-      console.log('Phantom connection response:', response);
-      console.log('PublicKey object (from provider):', response.publicKey);
-      console.log('PublicKey type:', typeof response.publicKey);
-      console.log('PublicKey methods:', Object.getOwnPropertyNames(response.publicKey));
-      
-      // Use provider object directly (avoids cross-bundle class mismatch)
-      const pkString = response.publicKey.toBase58 ? response.publicKey.toBase58() : response.publicKey.toString();
-      console.log('PublicKey string:', pkString);
-      console.log('PublicKey string length:', pkString.length);
-      
-      // Store both the string and provider object
-      setWallet(pkString);
-      setProviderPublicKeyObj(response.publicKey);
-      setStatusMessage('Wallet connected successfully!');
-    } catch (error) {
-      console.error('Wallet connection failed:', error);
-      setStatusMessage('Failed to connect wallet. Please try again.');
-    } finally {
-      setIsConnecting(false);
-    }
+  // Connect wallet using wallet adapter modal
+  const connectWallet = () => {
+    setVisible(true);
   };
 
   // Hash article to blockchain (transfer + memo on mainnet)
   const hashArticle = async () => {
-    if (!wallet) {
+    // Validation: Always check connected && publicKey before use
+    if (!connected || !publicKey) {
       setStatusMessage('Please connect your wallet first.');
+      setVisible(true);
       return;
     }
 
@@ -466,19 +437,31 @@ function App() {
     try {
       setIsHashing(true);
       setStatusMessage('Hashing article to blockchain...');
-      
-      console.log('Wallet state:', { wallet, providerPublicKeyObj });
-      console.log('Wallet type:', typeof wallet);
-      console.log('providerPublicKeyObj type:', typeof providerPublicKeyObj);
-      console.log('Wallet value:', wallet);
-      console.log('providerPublicKeyObj value:', providerPublicKeyObj);
 
       // Generate SHA-256 hash
       const hash = await sha256(articleText);
       
-      // Create real Solana transaction using imported web3.js
-      const connection = new Connection(RPC_URL, 'confirmed');
-      const treasuryPubkey = new PublicKey(TREASURY_BASE58);
+      // Construct treasury PublicKey with try-catch (hardcoded program ID)
+      let treasuryPubkey;
+      try {
+        treasuryPubkey = new PublicKey(TREASURY_BASE58);
+      } catch (e) {
+        console.error('Invalid treasury public key:', e);
+        setStatusMessage('Invalid treasury address configuration.');
+        setIsHashing(false);
+        return;
+      }
+
+      // Construct memo program ID with try-catch
+      let memoProgramId;
+      try {
+        memoProgramId = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg');
+      } catch (e) {
+        console.error('Invalid memo program ID:', e);
+        setStatusMessage('Invalid memo program configuration.');
+        setIsHashing(false);
+        return;
+      }
 
       // Determine current price in lamports (0.001 SOL * 1.1^hashCount)
       const currentCount = hashCount || 0;
@@ -488,28 +471,9 @@ function App() {
       // Build transaction: transfer to treasury + memo with hash payload
       const transaction = new Transaction();
 
-      // Resolve sender pubkey string consistently
-      let walletPubKeyString;
-      try {
-        walletPubKeyString = normalizeWalletBase58(wallet || providerPublicKeyObj);
-      } catch (e) {
-        console.error('Invalid wallet base58:', e);
-        setStatusMessage('Wallet key invalid. Please disconnect and reconnect Phantom.');
-        setIsHashing(false);
-        return;
-      }
-      // Build PublicKey from raw bytes to avoid cross-bundle constructor quirks
-      let fromPubkey;
-      try {
-        const decoded = bs58.decode(walletPubKeyString);
-        if (decoded.length !== 32) throw new Error('decoded length != 32');
-        fromPubkey = new PublicKey(decoded);
-      } catch (e) {
-        console.error('Failed to construct PublicKey from base58 bytes:', e);
-        setStatusMessage('Failed to prepare wallet key. Please reconnect Phantom.');
-        setIsHashing(false);
-        return;
-      }
+      // Use validated publicKey from useWallet() directly - don't reconstruct
+      // publicKey is already a validated PublicKey instance from the wallet adapter
+      const fromPubkey = publicKey;
 
       // 1) Transfer instruction (payment)
       transaction.add(
@@ -521,7 +485,6 @@ function App() {
       );
 
       // 2) Memo instruction (hash + URL + price)
-      const memoProgramId = new PublicKey('MemoSq4gqABAXKb96qnH8TysKcWfC85B2qXg');
       const memoPayload = JSON.stringify({
         v: 1,
         sha256: hash,
@@ -538,18 +501,14 @@ function App() {
         })
       );
 
-      if (!providerPublicKeyObj || (!providerPublicKeyObj.toBase58 && !providerPublicKeyObj.toString)) {
-        setStatusMessage('Wallet not properly connected. Please reconnect your wallet.');
-        setIsHashing(false);
-        return;
-      }
-
+      // Get recent blockhash and set fee payer
       const { blockhash } = await connection.getLatestBlockhash('finalized');
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
 
-      // Request wallet to sign and send transaction
-      const { signature } = await window.solana.signAndSendTransaction(transaction);
+      // Sign and send transaction using wallet adapter
+      // sendTransaction automatically signs the transaction with the connected wallet
+      const signature = await sendTransaction(transaction, connection);
       
       // Wait for confirmation
       await connection.confirmTransaction(signature, 'confirmed');
@@ -567,7 +526,7 @@ function App() {
     } catch (error) {
       console.error('Hashing failed:', error);
       
-      if (error.message.includes('User rejected')) {
+      if (error.message.includes('User rejected') || error.message.includes('User declined')) {
         setStatusMessage('Transaction was cancelled by user.');
       } else if (error.message.includes('Insufficient funds')) {
         setStatusMessage('Insufficient SOL balance. Please add some SOL to your wallet.');
@@ -766,25 +725,35 @@ function App() {
           </div>
 
           {/* Wallet Connection */}
-          {!wallet ? (
+          {!connected || !publicKey ? (
             <button
               className="connect-button"
               onClick={connectWallet}
-              disabled={isConnecting}
             >
-              {isConnecting ? (
-                <Loader className="button-icon" />
-              ) : (
-                <Shield className="button-icon" />
-              )}
-              {isConnecting ? 'Connecting...' : 'Connect Phantom Wallet'}
+              <Shield className="button-icon" />
+              Connect Phantom Wallet
             </button>
           ) : (
             <div className="wallet-connected">
               <div className="wallet-info">
                 <CheckCircle className="success-icon" />
-                <span>Wallet Connected: {wallet.slice(0, 8)}...{wallet.slice(-8)}</span>
+                <span>Wallet Connected: {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}</span>
               </div>
+              <button
+                onClick={disconnect}
+                style={{
+                  marginLeft: '12px',
+                  padding: '6px 12px',
+                  fontSize: '0.875rem',
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Disconnect
+              </button>
             </div>
           )}
 
@@ -803,7 +772,7 @@ function App() {
           )}
 
           {/* Hash Button */}
-          {wallet && (
+          {connected && publicKey && (
             <button
               className="hash-button"
               onClick={hashArticle}
