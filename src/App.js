@@ -195,22 +195,26 @@ function App() {
   // Calculate bond curve price
   const calculateBondPrice = (count) => basePrice * Math.pow(priceMultiplier, count);
 
-  // Fetch current count from chain (best-effort)
+  // Fetch current count from chain (best-effort, non-blocking)
   const refreshHashCount = useCallback(async () => {
+    // Silently fail - hash count is informational only
     try {
       let treasury;
       try {
         treasury = new PublicKey(TREASURY_BASE58);
       } catch (e) {
-        console.error('Invalid treasury public key:', e);
         setHashCount(0);
         return;
       }
-      const sigs = await connection.getSignaturesForAddress(treasury, { limit: 1000 });
+      // Use a shorter timeout and smaller limit to avoid RPC issues
+      const sigs = await Promise.race([
+        connection.getSignaturesForAddress(treasury, { limit: 100 }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+      ]);
       // Heuristic: count all historical txs touching treasury as hashes
       setHashCount(Array.isArray(sigs) ? sigs.length : 0);
     } catch (e) {
-      console.warn('Failed to fetch hash count; defaulting to 0:', e?.message || e);
+      // Silently default to 0 - this doesn't block the main functionality
       setHashCount(0);
     }
   }, [connection]);
